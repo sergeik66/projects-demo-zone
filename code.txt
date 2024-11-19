@@ -1,0 +1,53 @@
+def add_raw_metadata_columns(response_json, df_log_append):
+    response_json = response_json['metadata']
+    status = 'Success'
+    files_read = None
+    files_written = None
+    throughput = None
+    data_read = None
+    data_written = None
+    copy_duration = None
+    if 'errors' in response_json and len(response_json['errors']) > 0 or response_json['executionDetails'][0]['status'] == 'Canceled':
+        status = 'Failed'
+    if 'filesRead' in response_json: # for blob source
+        files_read = response_json['filesRead']
+    elif 'rowsRead' in response_json: #for database source
+        files_read = response_json['rowsRead']
+    if 'filesWritten' in response_json: # for blob source
+        files_written = response_json['filesWritten']
+    elif 'rowsCopied' in response_json: #for database source
+        files_written = response_json['rowsCopied']
+    if 'throughput' in response_json: 
+        throughput = response_json['throughput']
+    if 'dataRead' in response_json:
+        data_read = response_json['dataRead']
+    if 'dataWritten' in response_json:
+        data_written = response_json['dataWritten']
+    if 'copyDuration' in response_json:
+        copy_duration = response_json['copyDuration']
+    return (df_log_append.withColumn('data_read', lit(data_read).cast('bigint'))
+                         .withColumn('data_written', lit(data_written).cast('bigint'))
+                         .withColumn('files_read', lit(files_read))
+                         .withColumn('files_written', lit(files_written))
+                         .withColumn('status', lit(status))
+                         .withColumn('throughput', lit(throughput).cast('double'))
+                         .withColumn('copy_duration', lit(copy_duration).cast('integer')))
+
+# COMMAND ----------
+
+def add_prep_metadata_columns(response_json, df_log_append):
+    response_json = response_json['metadata']['runOutput']
+    status = 'Success'
+    if 'error_message' in response_json:
+        status = 'Failed'
+    try:
+        total_rows_read = response_json['total_rows_read']
+    except KeyError:
+        total_rows_read = -1
+    try:
+        total_rows_written = response_json['total_rows_written']
+    except KeyError:
+        total_rows_written = -1
+    return (df_log_append.withColumn('data_read', lit(total_rows_read).cast('bigint'))
+                  .withColumn('data_written', lit(total_rows_written).cast('bigint'))
+                  .withColumn('status', lit(status)))
