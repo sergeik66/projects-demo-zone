@@ -1,0 +1,24 @@
+schema_name = 'audit'
+    table_name = 'quarantine_log'
+    table_path = f"{get_external_location_url('audit')}/quarantine/quarantine_log"
+    table_identifier = get_table_reference(catalog_name, schema_name, table_name)
+CREATE TABLE IF NOT EXISTS {table_identifier}
+        (
+            product_name STRING,
+            feed_name STRING,
+            source_system STRING,
+            dataset_name STRING,
+            etl_id STRING,
+            total_rows INT,
+            quarantine_type STRING,
+            quarantine_level STRING,
+            log_date DATE,
+            log_datetime TIMESTAMP,
+            primary_key_list STRING,
+            is_notification_enabled BOOLEAN,
+            notification_datetime TIMESTAMP
+        )
+        USING DELTA
+        PARTITIONED BY (product_name, feed_name, source_system, dataset_name)
+        LOCATION '{table_path}'
+        TBLPROPERTIES(delta.autoOptimize.optimizeWrite = true)
