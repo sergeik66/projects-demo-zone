@@ -1,0 +1,56 @@
+{
+    "datasetName": "address",
+    "enable": true,
+    "datasetTypeName": "database",
+    "workLoadType": "all-purpose",
+    "skipPrepLoad": false,
+    "datasetSchema": "saleslt",
+    "sourceSystemProperties": {
+        "includeSpecificColumns": [
+            "AddressID",
+            "AddressLine1",
+            "AddressLine2",
+            "City",
+            "ModifiedDate"
+        ],
+        "filterExpression": "AND AddressLine1 != 'xyz'",
+        "sourceSystemName": "SampleData",
+        "sourceDatabaseType": "sqldatabase",
+        "ingestType": "watermark",
+        "isDynamicQuery": true,
+        "integrationRuntime": "AutoResolve",
+        "connectionStringSecretName": "onyx-sql-sample-db-conn-str",
+        "sourceEntityWatermarkIdentifier": "ModifiedDate"
+    },
+    "rawProperties": {
+        "containerName": "raw",
+        "fileType": "parquet",
+        "directoryName": "SampleData"
+    },
+    "prepProperties": {
+        "useNotifications": false,
+        "triggerType": "batch",
+        "schemaEvolutionMode": "addNewColumns",
+        "schemaLocation": null,
+        "fileOptions": {
+            "encoding": "ISO-8859-1",
+            "header": true,
+            "inferColumnTypes": true,
+            "multiline": true,
+            "delimiter": ",",
+            "escape": "\"",
+            "timestampFormat": "dd/MM/yyyy"
+        },
+        "columnList": "*",
+        "primaryKeyList": [
+            "AddressID"
+        ],
+        "sensitiveColumns": null,
+        "enableSensitiveFieldCheck": false,
+        "deletionCaptureEnabled": false,
+        "duplicateCheckEnabled": true,
+        "targetFileFormat": "delta",
+        "targetLoadType": "merge"
+    },
+    "$schema": "../../../devops/schema/dataset.schema.json"
+}
