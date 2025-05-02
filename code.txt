@@ -45,3 +45,50 @@ if response.status_code == 200:
     print("File details:", response.json())
 else:
     print(f"Error: {response.status_code} - {response.text}")
+
+
+import requests
+from msal import ConfidentialClientApplication
+
+# Configuration
+tenant_id = "your-tenant-id"  # Azure tenant ID
+client_id = "your-client-id"  # Application (client) ID
+client_secret = "your-client-secret"  # Client secret
+tenant_name = "your-tenant"  # e.g., "contoso" for contoso.sharepoint.com
+authority = f"https://login.microsoftonline.com/{tenant_id}"
+resource = f"https://{tenant_name}.sharepoint.com"  # SharePoint resource
+
+# Initialize MSAL client
+app = ConfidentialClientApplication(
+    client_id=client_id,
+    client_credential=client_secret,
+    authority=authority
+)
+
+# Acquire token for SharePoint REST API
+result = app.acquire_token_for_client(resource=resource)
+
+if "access_token" not in result:
+    print("Error acquiring token:", result.get("error_description"))
+    raise Exception("Failed to acquire access token")
+
+access_token = result["access_token"]
+print("Access token acquired successfully")
+
+# SharePoint REST API request
+file_relative_url = "/sites/your-site-name/Shared Documents/your-file-name.docx"
+endpoint = f"https://{tenant_name}.sharepoint.com/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')"
+
+headers = {
+    "Authorization": f"Bearer {access_token}",
+    "Accept": "application/json;odata=verbose"  # Required for SharePoint REST API
+}
+
+# Make the request
+response = requests.get(endpoint, headers=headers)
+
+if response.status_code == 200:
+    print("Success! File details:", response.json())
+else:
+    print(f"Error: {response.status_code} - {response.text}")
+
