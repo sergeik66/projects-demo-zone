@@ -1,3 +1,5 @@
+Responce: Unsupported app only token.
+
 Steps to Test App Access in Postman
 Step 1: Configure Postman for OAuth 2.0 Authentication
 Open Postman:
