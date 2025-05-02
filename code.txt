@@ -67,7 +67,7 @@ app = ConfidentialClientApplication(
 
 # Acquire token for SharePoint REST API
 result = app.acquire_token_for_client(resource=resource)
-
+# TypeError: ConfidentialClientApplication.acquire_token_for_client() missing 1 required positional argument: 'scopes'
 if "access_token" not in result:
     print("Error acquiring token:", result.get("error_description"))
     raise Exception("Failed to acquire access token")
