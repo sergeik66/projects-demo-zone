@@ -1,3 +1,98 @@
+Possible Causes
+MSAL Library Version:
+The msal library requires the scopes parameter for acquire_token_for_client. If you’re using an outdated version or there’s a typo in the code, it could cause this error.
+
+Code Execution Issue:
+The code might not be using the updated version you provided, or there’s a typo or caching issue causing the old code (with resource) to run.
+
+Environment Issue:
+Multiple Python environments or cached modules might be causing the wrong msal version to be used.
+
+Incorrect Parameter:
+The scopes parameter might not be passed correctly due to a syntax error or logic issue in the code.
+
+Troubleshooting Steps
+Verify MSAL Version:
+Run pip show msal to check the installed version. Ensure it’s up-to-date (e.g., 1.24.0 or later as of May 2025).
+
+Update if needed: pip install --upgrade msal.
+
+Confirm Code:
+Ensure you’re running the exact code provided in my last response, with scopes correctly set.
+
+Check for typos or leftover references to resource in your script.
+
+Clear Cache and Re-run:
+Clear Python’s cache (__pycache__ folders) in your project directory.
+
+Restart your Python environment or IDE to ensure the updated code is executed.
+
+Test Minimal Code:
+Run a minimal version of the token acquisition code to isolate the issue.
+
+Corrected and Minimal Code
+Below is a minimal, verified code snippet to acquire the token for the SharePoint REST API, ensuring the scopes parameter is correctly passed. This also includes additional error handling and logging to diagnose the issue.
+python
+
+import msal
+import requests
+
+# Configuration
+tenant_id = "your-tenant-id"  # Azure tenant ID
+client_id = "your-client-id"  # Application (client) ID
+client_secret = "your-client-secret"  # Client secret
+tenant_name = "your-tenant"  # e.g., "contoso" for contoso.sharepoint.com
+authority = f"https://login.microsoftonline.com/{tenant_id}"
+scopes = [f"https://{tenant_name}.sharepoint.com/.default"]  # SharePoint scope
+
+# Initialize MSAL client
+app = msal.ConfidentialClientApplication(
+    client_id=client_id,
+    client_credential=client_secret,
+    authority=authority
+)
+
+# Debugging: Print MSAL version and scope
+print("MSAL version:", msal.__version__)
+print("Scopes:", scopes)
+
+# Acquire token
+try:
+    result = app.acquire_token_for_client(scopes=scopes)
+except Exception as e:
+    print(f"Error during token acquisition: {str(e)}")
+    raise
+
+# Check token result
+if "access_token" not in result:
+    print("Error acquiring token:", result.get("error_description"))
+    raise Exception("Failed to acquire access token")
+
+access_token = result["access_token"]
+print("Access token acquired successfully")
+
+# SharePoint REST API request (for testing)
+file_relative_url = "/sites/your-site-name/Shared Documents/your-file-name.docx"
+endpoint = f"https://{tenant_name}.sharepoint.com/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')"
+
+headers = {
+    "Authorization": f"Bearer {access_token}",
+    "Accept": "application/json;odata=verbose"
+}
+
+# Make the request
+response = requests.get(endpoint, headers=headers)
+
+if response.status_code == 200:
+    print("Success! File details:", response.json())
+else:
+    print(f"Error: {response.status_code} - {response.text}")
+
+
+
+
+
+
 import requests
 from msal import ConfidentialClientApplication
 
