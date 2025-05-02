@@ -1,0 +1,21 @@
+Troubleshooting Steps
+Verify Token:
+Decode the token at https://jwt.ms to confirm:
+The aud (audience) is https://your-tenant.sharepoint.com.
+
+The roles include SharePoint permissions (e.g., AllSites.Read).
+
+Check Azure AD Permissions:
+Ensure the Azure AD app has SharePoint application permissions (e.g., AllSites.Read or Sites.FullControl.All) with admin consent granted.
+
+Configure SharePoint App-Only Access:
+SharePoint Online requires explicit app-only permission configuration for the app to access the site using app-only tokens.
+
+This involves granting the app access to the specific site collection or tenant via SharePoint’s app-only principal.
+
+Test with a Simpler Endpoint:
+Try a different SharePoint REST API endpoint (e.g., /_api/web) to confirm whether the issue is specific to GetFileByServerRelativeUrl.
+
+Check SharePoint Tenant Settings:
+Ensure the tenant allows app-only access for third-party apps. Some tenants disable this for security reasons.
+
