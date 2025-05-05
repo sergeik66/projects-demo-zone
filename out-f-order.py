@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, coalesce, lit, max, current_timestamp
+from pyspark.sql.functions import col, row_number
 from pyspark.sql.window import Window
 
 # Initialize Spark session
@@ -29,18 +29,17 @@ dim_df = dim_df.withColumn("effective_start", col("effective_start").cast("times
 fact_df = fact_df.withColumn("transaction_time", col("transaction_time").cast("timestamp"))
 
 # Step 1: Join Fact and Dimension tables to align facts with correct dimension version
-# Match fact records to dimension records where transaction_time is between effective_start and effective_end
-fact_dim_joined = fact_df.join(
-    dim_df,
-    (fact_df.customer_id == dim_df.customer_id) &
-    (fact_df.transaction_time.between(dim_df.effective_start, dim_df.effective_end)),
+# Alias columns to avoid ambiguity
+fact_dim_joined = fact_df.alias("f").join(
+    dim_df.alias("d"),
+    (col("f.customer_id") == col("d.customer_id")) &
+    (col("f.transaction_time").between(col("d.effective_start"), col("d.effective_end"))),
     "left"
 )
 
 # Step 2: Handle cases where no matching dimension record is found
-# For late-arriving facts, we may need to use the most recent dimension record if no match exists
 # Create a window to get the latest dimension record per customer_id
-window_spec = Window.partitionBy("dim_df.customer_id").orderBy(col("effective_start").desc())
+window_spec = Window.partitionBy("customer_id").orderBy(col("effective_start").desc())
 
 # Add a fallback dimension record for unmatched facts
 dim_latest = dim_df.withColumn("row_num", row_number().over(window_spec)) \
@@ -48,33 +47,30 @@ dim_latest = dim_df.withColumn("row_num", row_number().over(window_spec)) \
                    .drop("row_num")
 
 # Join unmatched facts with the latest dimension record
-unmatched_facts = fact_dim_joined.filter(col("dim_df.customer_id").isNull()) \
-                                .drop(*dim_columns) \
+unmatched_facts = fact_dim_joined.filter(col("d.customer_id").isNull()) \
+                                .select([col(f"f.{c}") for c in fact_df.columns]) \
                                 .join(
-                                    dim_latest,
-                                    fact_df.customer_id == dim_latest.customer_id,
+                                    dim_latest.alias("dl"),
+                                    col("f.customer_id") == col("dl.customer_id"),
                                     "left"
                                 )
 
 # Step 3: Combine matched and unmatched results
-final_result = fact_dim_joined.filter(col("dim_df.customer_id").isNotNull()) \
+final_result = fact_dim_joined.filter(col("d.customer_id").isNotNull()) \
                              .union(unmatched_facts)
 
 # Step 4: Select relevant columns for output
 output = final_result.select(
-    col("fact_id"),
-    col("fact_df.customer_id").alias("customer_id"),
-    col("amount"),
-    col("transaction_time"),
-    col("customer_name"),
-    col("location")
+    col("f.fact_id").alias("fact_id"),
+    col("f.customer_id").alias("customer_id"),
+    col("f.amount").alias("amount"),
+    col("f.transaction_time").alias("transaction_time"),
+    col("d.customer_name").alias("customer_name"),
+    col("d.location").alias("location")
 )
 
 # Show the result
 output.show(truncate=False)
-
-# Optional: Save the result to a table or file
-# output.write.mode("overwrite").saveAsTable("corrected_fact_table")
 
 # Stop Spark session
 spark.stop()
