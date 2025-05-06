@@ -1,3 +1,5 @@
+Error acquiring token: AADSTS1002012: The provided value for scope https://guardinsurancegroup.sharepoint.com/Sites.Read.All is not valid. Client credential flows must have a scope value with /.default suffixed to the resource identifier (application ID URI)
+
 from typing import Optional, List, Dict, Any
 from azure.identity import ClientSecretCredential
 from azure.keyvault.secrets import SecretClient
