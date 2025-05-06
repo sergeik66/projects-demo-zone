@@ -19,3 +19,8 @@ Ensure admin consent is granted for these permissions.
 Re-run the notebook script to obtain a token with the correct roles and validate the file download.
 
 
+Site ID: guardinsurancegroup.sharepoint.com,0578f0c1-7ef4-4a29-ad2a-c53cfeadc111,4e425572-d366-47c1-a74c-2f6d28535311
+Graph HTTP error: 404 Client Error: Not Found for url: https://graph.microsoft.com/v1.0/sites/guardinsurancegroup.sharepoint.com,69b58035-2e49-4510-9f18-776f0c4f418c/drive/root:/Shared%20Documents/Source%20Files/Ref_ASLOB_v1.xlsx:/content, Response: {"error":{"code":"itemNotFound","message":"The resource could not be found."}}
+
+
+
