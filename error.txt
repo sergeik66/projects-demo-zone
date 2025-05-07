@@ -1,6 +1,7 @@
-with open(lakehouse_path, "wb") as f:
-  f.write(file_content)
-FileNotFoundError: [Errno 2] No such file or directory: 'abfss://a72bf9c2-7aab-42ab-b2c7-42833f3ca89e@onelake.dfs.fabric.microsoft.com/b66e51f1-4687-4a21-ac17-9f609ec41cc2/Files/sharepoint_downloads/aaa.xlsx'
+ # Write to a temporary local file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as temp_file:
+            temp_path = temp_file.name
+            temp_file.write(file_content)
 
 Here’s a breakdown of the issue and how to resolve it:
 Current Behavior:
