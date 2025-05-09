@@ -43,3 +43,9 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
     print(f"File size: {os.path.getsize(temp_path)} bytes")
 
 !azcopy copy '/tmp/tmpe282k15r.xlsx' 'https://onelake.blob.fabric.microsoft.com/a72bf9c2-7aab-42ab-b2c7-42833f3ca89e/b66e51f1-4687-4a21-ac17-9f609ec41cc2/Files/reference_codes/window_protection_covering_types_code/affd4711-1713-4afc-98f6-32870353b2fg/Ref_Window_Protection_Covering_Types_v1.xlsx' --trusted-microsoft-suffixes="*.pbidedicated.windows.net;*.pbidedicated.windows-int.net;*.fabric.microsoft.com" --skip-version-check
+2025/05/09 16:20:59 ==> REQUEST/RESPONSE (Try=1/238.542661ms, OpTime=298.487319ms) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://onelake.blob.fabric.microsoft.com/a72bf9c2-7aab-42ab-b2c7-42833f3ca89e/b66e51f1-4687-4a21-ac17-9f609ec41cc2%2FFiles%2Freference_codes%2Fwindow_protection_covering_types_code%2Faffd4711-1713-4afc-98f6-32870353b2fg%2FRef_Window%20Protection%20Covering%20Types_v1.xlsx
+
+2025/05/09 16:20:59 ERR: [P#0-T#0] UPLOADFAILED: /tmp/tmpe282k15r.xlsx : 404 : 404 Not Found. When Committing block list. X-Ms-Request-Id: 
+
+   Dst: https://onelake.blob.fabric.microsoft.com/a72bf9c2-7aab-42ab-b2c7-42833f3ca89e/b66e51f1-4687-4a21-ac17-9f609ec41cc2/Files/reference_codes/window_protection_covering_types_code/affd4711-1713-4afc-98f6-32870353b2fg/Ref_Window%20Protection%20Covering%20Types_v1.xlsx
