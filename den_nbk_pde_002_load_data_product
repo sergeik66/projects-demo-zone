@@ -1,0 +1,156 @@
+import json
+from datetime import datetime
+from uuid import uuid4
+from spark_engine.sparkengine import SparkEngine
+from spark_engine.common.lakehouse import LakehouseManager
+import notebookutils as nu
+
+# Existing variables
+feed_name = 'claims_bop_demo'
+run_id = 'f4b58b89-aaa7-45d9-b301-82fe25c28de9'
+elt_id = '016d62c1-d885-4936-8d29-80b09868f589'
+product_name = 'BOP'
+source_system = 'Curated'
+invocation_id = 'f4b58b89-aaa7-45d9-b301-82fe25c28de9'
+elt_start_date_time = "12/12/2024 13:19:26"
+
+# JSON payload (for demonstration; replace with actual loading mechanism if needed)
+json_payload = '''
+{
+    "loadGroupA": [
+        {
+            "files": [
+                {
+                    "fileName": "dim_catastrophe",
+                    "modelConfigFolderName": "demo_product"
+                },
+                {
+                    "fileName": "dim_date",
+                    "modelConfigFolderName": "demo_product"
+                }
+            ]
+        }
+    ],
+    "loadGroupB": [
+        {
+            "files": []
+        }
+    ],
+    "loadGroupC": [
+        {
+            "files": []
+        }
+    ]
+}
+'''
+
+def get_current_timestamp() -> object:
+    return datetime.utcnow()
+
+def get_file_location_url(lakehouse_name, file_relative_path) -> str:
+    lakehouse_manager = LakehouseManager(lakehouse_name=lakehouse_name)
+    lakehouse_files_path = f"{lakehouse_manager.lakehouse_path}/Files"
+    return f"{lakehouse_files_path}/{file_relative_path}"
+
+def send_message_to_logs(message_metadata: object, log_file_name: str) -> object:
+    message = {
+        "product_name": product_name,
+        "feed_name": feed_name,
+        "dataset_name": file_name,
+        "source_system": source_system,
+        "metadata": message_metadata,
+        "zone": zone_name,
+        "stage": stage_name,
+        "orchestration_tool": "spark",
+        "zone_start_date_time": str(processing_start_time),
+        "zone_end_date_time": str(get_current_timestamp()),
+        "elt_id": elt_id,
+        "run_id": run_id,
+        "invocation_id": invocation_id
+    }
+    output_message = json.dumps(message)
+    try:
+        nu.fs.put(log_file_name, output_message, True)
+    except Exception as error:
+        raise error
+
+def process_data(product_config_path, product_name, feed_name, file_name, elt_id, run_id, processing_start_time, log_file_name):
+    try:
+        data = (
+            SparkEngine.transform(product_config_path)
+            .configure_transform(
+                product_name=product_name,
+                feed_name=feed_name,
+                dataset_name=file_name
+            )
+            .start_transform(elt_id=elt_id, run_id=run_id)
+            .metrics()
+        )
+    except Exception as error:
+        data = {
+            "ingestion": {
+                "error_message": str(error),
+                "startTime": str(processing_start_time)
+            }
+        }
+        print("Exception occurred while processing the data: ", error)
+        raise error
+    finally:
+        message_metadata = {"runOutput": data}
+        send_message_to_logs(message_metadata, log_file_name)
+    return data
+
+# Lakehouse names
+logs_lakehouse_name = "den_lhw_pdi_001_observability"
+product_config_lakehouse_name = "den_lhw_pdi_001_metadata"
+
+# Check for additional parameters
+required_params = ["workspace_id", "lh_metadata_id", "lh_observability_id"]
+missing_params = [param for param in required_params if param not in locals() or eval(param) is None or eval(param) == '']
+
+# Zone and stage settings
+if 'zone' in locals():
+    zone_name = zone
+    stage_name = "Share"
+else:
+    zone_name = "Product"
+    stage_name = "Transformation"
+
+# Parse JSON payload
+payload = json.loads(json_payload)
+
+# Process each LoadGroup
+processing_start_time = elt_start_date_time
+
+for load_group_key, load_groups in payload.items():
+    print(f"Processing {load_group_key}")
+    for load_group in load_groups:
+        for file_info in load_group.get("files", []):
+            file_name = file_info["fileName"]
+            model_config_folder_name = file_info["modelConfigFolderName"]
+
+            # Construct file paths
+            config_file_relative_path = f"{model_config_folder_name}/{file_name}.yaml"
+            log_file_relative_path = f"Metadata_Logs/{uuid4()}.json"
+
+            if missing_params:
+                log_file_name = get_file_location_url(logs_lakehouse_name, log_file_relative_path)
+                product_config_path = get_file_location_url(product_config_lakehouse_name, config_file_relative_path)
+                print("Constructing abfss path with LakehouseManager class")
+            else:
+                log_file_name = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lh_observability_id}/Files/{log_file_relative_path}"
+                product_config_path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lh_metadata_id}/Files/{config_file_relative_path}"
+                print(f"Constructing abfss path with additional parameters: workspace_id={workspace_id}, lh_observability_id={lh_observability_id}, lh_metadata_id={lh_metadata_id}")
+
+            # Process the data for the current file
+            print(f"Processing file: {file_name}")
+            process_data(
+                product_config_path=product_config_path,
+                product_name=product_name,
+                feed_name=feed_name,
+                file_name=file_name,
+                elt_id=elt_id,
+                run_id=run_id,
+                processing_start_time=processing_start_time,
+                log_file_name=log_file_name
+            )
