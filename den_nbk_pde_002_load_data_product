@@ -4,6 +4,7 @@ from uuid import uuid4
 from spark_engine.sparkengine import SparkEngine
 from spark_engine.common.lakehouse import LakehouseManager
 import notebookutils as nu
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Existing variables
 feed_name = 'claims_bop_demo'
@@ -93,7 +94,7 @@ def process_data(product_config_path, product_name, feed_name, file_name, elt_id
                 "startTime": str(processing_start_time)
             }
         }
-        print("Exception occurred while processing the data: ", error)
+        print(f"Exception occurred while processing the data for {file_name}: {error}")
         raise error
     finally:
         message_metadata = {"runOutput": data}
@@ -119,38 +120,58 @@ else:
 # Parse JSON payload
 payload = json.loads(json_payload)
 
-# Process each LoadGroup
+# Process each LoadGroup sequentially, but process files in parallel
 processing_start_time = elt_start_date_time
+
+def process_file(file_info, missing_params):
+    """Helper function to process a single file."""
+    file_name = file_info["fileName"]
+    model_config_folder_name = file_info["modelConfigFolderName"]
+
+    # Construct file paths
+    config_file_relative_path = f"{model_config_folder_name}/{file_name}.yaml"
+    log_file_relative_path = f"Metadata_Logs/{uuid4()}.json"
+
+    if missing_params:
+        log_file_name = get_file_location_url(logs_lakehouse_name, log_file_relative_path)
+        product_config_path = get_file_location_url(product_config_lakehouse_name, config_file_relative_path)
+        print(f"Constructing abfss path with LakehouseManager class for {file_name}")
+    else:
+        log_file_name = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lh_observability_id}/Files/{log_file_relative_path}"
+        product_config_path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lh_metadata_id}/Files/{config_file_relative_path}"
+        print(f"Constructing abfss path with additional parameters for {file_name}: workspace_id={workspace_id}, lh_observability_id={lh_observability_id}, lh_metadata_id={lh_metadata_id}")
+
+    # Process the data for the current file
+    print(f"Processing file: {file_name}")
+    return process_data(
+        product_config_path=product_config_path,
+        product_name=product_name,
+        feed_name=feed_name,
+        file_name=file_name,
+        elt_id=elt_id,
+        run_id=run_id,
+        processing_start_time=processing_start_time,
+        log_file_name=log_file_name
+    )
 
 for load_group_key, load_groups in payload.items():
     print(f"Processing {load_group_key}")
     for load_group in load_groups:
-        for file_info in load_group.get("files", []):
-            file_name = file_info["fileName"]
-            model_config_folder_name = file_info["modelConfigFolderName"]
+        files = load_group.get("files", [])
+        if not files:
+            print(f"No files to process in {load_group_key}")
+            continue
 
-            # Construct file paths
-            config_file_relative_path = f"{model_config_folder_name}/{file_name}.yaml"
-            log_file_relative_path = f"Metadata_Logs/{uuid4()}.json"
-
-            if missing_params:
-                log_file_name = get_file_location_url(logs_lakehouse_name, log_file_relative_path)
-                product_config_path = get_file_location_url(product_config_lakehouse_name, config_file_relative_path)
-                print("Constructing abfss path with LakehouseManager class")
-            else:
-                log_file_name = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lh_observability_id}/Files/{log_file_relative_path}"
-                product_config_path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lh_metadata_id}/Files/{config_file_relative_path}"
-                print(f"Constructing abfss path with additional parameters: workspace_id={workspace_id}, lh_observability_id={lh_observability_id}, lh_metadata_id={lh_metadata_id}")
-
-            # Process the data for the current file
-            print(f"Processing file: {file_name}")
-            process_data(
-                product_config_path=product_config_path,
-                product_name=product_name,
-                feed_name=feed_name,
-                file_name=file_name,
-                elt_id=elt_id,
-                run_id=run_id,
-                processing_start_time=processing_start_time,
-                log_file_name=log_file_name
-            )
+        # Process files in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=4) as executor:  # Adjust max_workers as needed
+            future_to_file = {
+                executor.submit(process_file, file_info, missing_params): file_info["fileName"]
+                for file_info in files
+            }
+            for future in as_completed(future_to_file):
+                file_name = future_to_file[future]
+                try:
+                    result = future.result()
+                    print(f"Completed processing {file_name} with result: {result}")
+                except Exception as e:
+                    print(f"Error processing {file_name}: {e}")
