@@ -1,0 +1,28 @@
+{
+    "loadGroupA": [
+        {
+            "files": [
+                {
+                    "fileName": "dim_catastrophe",
+                    "modelConfigFolderName": "demo_product"
+                },
+                {
+                    "fileName": "dim_date",
+                    "modelConfigFolderName": "demo_product"
+                }
+            ]
+        }
+    ],
+    "loadGroupB": [
+        {
+            "files": [
+            ]
+        }
+    ],
+    "loadGroupC": [
+        {
+            "files": [              
+            ]
+        }
+    ]
+}
