@@ -100,20 +100,23 @@ def process_data(product_config_path, product_name, feed_name, file_name, elt_id
         message_metadata = {"runOutput": data}
         send_message_to_logs(message_metadata, log_file_name)
     return data
-# Determine max_workers based on Spark environment
 def get_spark_max_workers():
     try:
-        # Get SparkSession (assumes Spark is initialized in the environment)
-        spark = SparkSession.getActiveSession()
-        if spark is None:
-            spark = SparkSession.builder.getOrCreate()
-        
-        # Get the number of cores (default parallelism or executor cores)
-        sc = spark.sparkContext
-        total_cores = sc.defaultParallelism  # Reflects the number of available cores
-        max_workers = max(1, total_cores - 1)  # Ensure at least 1 worker, subtract 1 for headroom
-        print(f"Detected {total_cores} Spark cores, setting max_workers to {max_workers}")
+        # Option 1: Check environment variables (common in Databricks/Fabric)
+        spark_cores = os.environ.get("SPARK_EXECUTOR_CORES")  # Set in cluster config
+        if spark_cores:
+            total_cores = int(spark_cores) * int(os.environ.get("SPARK_EXECUTOR_INSTANCES", 1))
+            max_workers = max(1, total_cores - 1)  # Subtract 1 for headroom
+            print(f"Detected {total_cores} Spark cores from environment, setting max_workers to {max_workers}")
+            return max_workers
+
+        # Option 2: Fallback to a heuristic based on CPU count (if available)
+        import multiprocessing
+        cpu_count = multiprocessing.cpu_count()
+        max_workers = max(1, cpu_count - 1)
+        print(f"Using CPU count {cpu_count}, setting max_workers to {max_workers}")
         return max_workers
+
     except Exception as e:
         print(f"Could not determine Spark cores, defaulting to max_workers=3: {e}")
         return 3  # Fallback to a safe default
