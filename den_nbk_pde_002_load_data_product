@@ -76,30 +76,52 @@ def send_message_to_logs(message_metadata: object, log_file_name: str) -> object
         raise error
 
 def process_data(product_config_path, product_name, feed_name, file_name, elt_id, run_id, processing_start_time, log_file_name):
-    try:
-        data = (
-            SparkEngine.transform(product_config_path)
-            .configure_transform(
-                product_name=product_name,
-                feed_name=feed_name,
-                dataset_name=file_name
+    max_retries = 3
+    retry_delay = 60  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            data = (
+                SparkEngine.transform(product_config_path)
+                .configure_transform(
+                    product_name=product_name,
+                    feed_name=feed_name,
+                    dataset_name=file_name
+                )
+                .start_transform(elt_id=elt_id, run_id=run_id)
+                .metrics()
             )
-            .start_transform(elt_id=elt_id, run_id=run_id)
-            .metrics()
-        )
-    except Exception as error:
-        data = {
-            "ingestion": {
-                "error_message": str(error),
-                "startTime": str(processing_start_time)
-            }
-        }
-        print(f"Exception occurred while processing the data for {file_name}: {error}")
-        raise error
-    finally:
-        message_metadata = {"runOutput": data}
-        send_message_to_logs(message_metadata, log_file_name)
-    return data
+            return data  # Success, exit retry loop
+
+        except Exception as error:
+            # Check if the error is related to status code 429
+            is_429 = False
+            error_message = str(error).lower()
+            # Check for 429 in message or exception attributes (adjust based on spark_engine behavior)
+            if "429" in error_message or "too many requests" in error_message:
+                is_429 = True
+            elif hasattr(error, 'status_code') and error.status_code == 429:
+                is_429 = True
+            elif hasattr(error, 'response') and hasattr(error.response, 'status_code') and error.response.status_code == 429:
+                is_429 = True
+
+            if is_429 and attempt < max_retries - 1:
+                print(f"Received 429 for {file_name}, attempt {attempt + 1}/{max_retries}. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                continue  # Retry after delay
+            else:
+                # Either not a 429 or max retries reached
+                data = {
+                    "ingestion": {
+                        "error_message": str(error),
+                        "startTime": str(processing_start_time)
+                    }
+                }
+                print(f"Exception occurred while processing the data for {file_name}: {error}")
+                raise error  # Re-raise the error for outer handling
+        finally:
+            message_metadata = {"runOutput": data if 'data' in locals() else {}}
+            send_message_to_logs(message_metadata, log_file_name)
 def get_spark_max_workers():
     try:
         # Option 1: Check environment variables (common in Databricks/Fabric)
