@@ -1,0 +1,87 @@
+Release Notes: Data Processing Notebook Enhancements (Version [Insert Version Number])
+Release Date: May 13, 2025
+Overview
+This release enhances the data processing notebook to support dynamic processing of LoadGroup entries in JSON payloads, introduces parallel processing for improved performance, dynamically configures parallelism based on the Spark environment, implements retry logic for rate limit errors, and resolves a variable scoping issue. These changes improve scalability, reliability, and robustness for processing large datasets in a Spark-based environment.
+New Features
+Dynamic LoadGroup Processing
+Added support for processing all LoadGroup entries (e.g., loadGroupA, loadGroupB) in the JSON payload.
+
+Iterates through each files array within LoadGroup entries, calling process_data for each file.
+
+Handles variable LoadGroup names and counts, with safe handling of empty files arrays.
+
+Ensures configuration paths are constructed dynamically using fileName and modelConfigFolderName from the payload.
+
+Parallel Processing with ThreadPoolExecutor
+Implemented parallel execution of process_data calls for files within each LoadGroup using Python’s concurrent.futures.ThreadPoolExecutor.
+
+Processes files concurrently to reduce runtime for large payloads, while maintaining sequential processing of LoadGroup entries to manage resource usage.
+
+Includes robust error handling to ensure failures in one file do not halt processing of others.
+
+Dynamic max_workers Configuration
+Added logic to set the max_workers parameter for ThreadPoolExecutor based on the Spark environment.
+
+Checks environment variables (SPARK_EXECUTOR_CORES, SPARK_EXECUTOR_INSTANCES) to estimate total cores, setting max_workers to total_cores - 1 for headroom.
+
+Falls back to multiprocessing.cpu_count() - 1 if environment variables are unavailable, with a default of 3 if all detection fails.
+
+Eliminates dependency on pyspark.sql.SparkSession to avoid compatibility issues in non-standard Spark environments.
+
+Status Code 429 Retry Logic
+Introduced retry mechanism in the process_data function to handle HTTP 429 (Too Many Requests) errors.
+
+Retries up to 3 times with a 60-second delay between attempts, with configurable max_retries and retry_delay.
+
+Detects 429 errors via exception message, status_code attribute, or response.status_code, ensuring compatibility across exception types.
+
+Logs retry attempts for observability and preserves existing error logging for non-429 failures.
+
+Improvements
+Thread Safety and Variable Scoping:
+Fixed 'file_name' is not defined error by explicitly passing file_name to the send_message_to_logs function, eliminating reliance on global variables.
+
+Ensures thread-safe logging in parallel processing, with each file’s metadata accurately recorded in its respective log file.
+
+Robust Error Handling:
+Enhanced error handling in parallel processing to log and isolate failures per file, allowing other files to continue processing.
+
+Improved logging in process_data to capture retry attempts and final outcomes, even in failure cases.
+
+Code Maintainability:
+Refactored process_file as a helper function to encapsulate file-specific logic, improving readability and modularity.
+
+Added clear console output for processing steps, aiding debugging and monitoring.
+
+Bug Fixes
+Resolved 'file_name' is not defined error in send_message_to_logs by passing file_name explicitly from process_data.
+
+Corrected syntax error in log_file_relative_path construction ("grated" typo).
+
+Addressed potential race conditions in parallel processing by ensuring all variables are locally scoped or explicitly passed.
+
+Known Issues
+spark_engine Compatibility: The notebook assumes SparkEngine.transform and notebookutils.fs.put are thread-safe for parallel execution. If not, users may encounter concurrency issues, requiring a reduction in max_workers or sequential processing.
+
+429 Detection: The 429 retry logic relies on generic exception parsing. If spark_engine uses a custom exception structure, additional configuration may be needed for accurate detection.
+
+Dynamic max_workers: The max_workers calculation may underestimate resources in dynamic clusters (e.g., Databricks autoscaling). Users should monitor cluster performance and adjust defaults if needed.
+
+Deployment Notes
+Dependencies: Requires Python’s standard library (json, os, time, uuid, concurrent.futures, multiprocessing) and spark_engine/notebookutils (proprietary). No additional packages are needed.
+
+Environment: Tested in a Spark-based notebook environment (e.g., Databricks, Microsoft Fabric). Ensure SPARK_EXECUTOR_CORES and SPARK_EXECUTOR_INSTANCES are set for optimal max_workers configuration.
+
+Configuration: Update the JSON payload source (currently hardcoded) to match your data ingestion method (e.g., file read, parameter).
+
+Testing: Validate with payloads containing multiple LoadGroup entries and files to confirm parallel processing and retry logic. Monitor Spark UI for resource usage.
+
+Future Enhancements
+Integrate spark_engine-specific APIs for precise cluster resource detection, if available.
+
+Support dynamic retry delays based on Retry-After headers for 429 errors.
+
+Add optional logging of retry attempts to log files for enhanced observability.
+
+Explore multiprocessing.Pool for CPU-bound tasks if spark_engine workloads require it.
+
