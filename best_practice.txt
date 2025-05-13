@@ -1,0 +1,88 @@
+Compute Cost Management Best Practices
+Compute costs in Fabric primarily stem from the use of capacities (F or P SKUs) for workloads like Data Engineering, Data Science, Data Factory, and Real-Time Intelligence. Here’s how to optimize:
+	1. Choose the Right Capacity SKU:
+		○ Select the appropriate Fabric capacity (e.g., F2, F4, P1) based on workload size and performance needs. Start with a smaller SKU and scale up as needed.
+		○ Use F-series for development or small-scale workloads and P-series for production or high-performance scenarios.
+		○ Tip: Test workloads in a trial or low-tier capacity to estimate usage before committing to a higher SKU.
+	2. Leverage Auto-Scaling and Pause/Resume:
+		○ Enable auto-scaling for compute resources (e.g., Spark clusters) to dynamically adjust capacity based on demand, avoiding over-provisioning.
+		○ Use pause/resume for Fabric capacities during non-working hours or low-demand periods to minimize costs. Automate this with Azure Logic Apps or schedules in the Fabric admin portal.
+		○ Tip: Monitor usage patterns in the Fabric admin monitoring workspace to identify optimal pause schedules.
+	3. Optimize Spark Compute:
+		○ Right-Size Clusters: Configure Spark clusters with the smallest node size and number of nodes needed for your workload. Use the Starter Pools in Fabric for lightweight jobs.
+		○ Enable Dynamic Allocation: Allow Spark to scale executors up or down based on job requirements to avoid idle resources.
+		○ Use Delta Lake: Leverage Delta Lake’s optimized storage format to reduce compute overhead for queries and improve performance.
+		○ Tip: Profile Spark jobs in the Fabric UI to identify bottlenecks and optimize code (e.g., reduce shuffles, partition data efficiently).
+	4. Use Direct Lake Mode for Power BI:
+		○ For Power BI reports, use Direct Lake mode to query data directly from OneLake without duplicating data into imported models. This reduces compute costs for data refreshes and transformations.
+		○ Tip: Reserve import mode for scenarios requiring complex DAX calculations that Direct Lake can’t handle.
+	5. Monitor and Set Budgets:
+		○ Use Azure Cost Management + Billing to track Fabric compute costs by workspace, capacity, or workload type.
+		○ Set budgets and alerts to notify administrators of spending spikes (e.g., due to unoptimized Spark jobs or runaway queries).
+		○ Tip: Integrate cost data with Power BI for custom dashboards to visualize compute usage trends.
+		○ Azure Cost Management + Billing: Track and analyze compute and storage costs (https://azure.microsoft.com/en-us/services/cost-management/).
+		○ Fabric Admin Portal: Monitor capacity and storage usage (https://learn.microsoft.com/en-us/fabric/admin/).
+		○ Microsoft Purview: Catalog and govern data to optimize storage (https://learn.microsoft.com/en-us/purview/).
+		○ Azure Advisor: Get personalized cost-saving recommendations (https://azure.microsoft.com/en-us/services/advisor/).
+		○ Microsoft Learn: Free training on Fabric cost management (https://learn.microsoft.com/en-us/training/paths/get-started-fabric/).
+		
+	6. Implement Tagging and Cost Allocation:
+		○ Apply tags to Fabric capacities and workspaces (e.g., by department, project, or environment) to allocate costs accurately and identify high-spend areas.
+		○ Use Azure Resource Manager (ARM) tags for consistent tracking across Azure and Fabric resources.
+		○ Tip: Enforce tagging policies via Azure Policy to ensure compliance.
+
+Storage Cost Management Best Practices
+Storage costs in Fabric are driven by data stored in OneLake, the unified data lake, and related services like Azure Data Lake Storage Gen2 (ADLS Gen2). Here’s how to optimize:
+	1. Optimize Data Storage in OneLake:
+		○ Use Delta Lake Format: Store data in Delta Lake (Parquet-based) to benefit from compression, partitioning, and Z-order indexing, which reduce storage size and query costs.
+		○ Partition Data Strategically: Partition large datasets by frequently queried columns (e.g., date, region) to minimize data scanned during queries.
+		○ Enable Compression: Use Snappy or ZSTD compression for Delta tables to reduce storage footprint without sacrificing performance.
+		○ Tip: Regularly review table metadata in Fabric’s Data Engineering experience to optimize partitioning and compression.
+	2. Implement Data Lifecycle Management:
+		○ Archive Cold Data: Move infrequently accessed data to cool or archive tiers in ADLS Gen2, which offer lower storage costs (but higher access costs).
+		○ Delete Unused Data: Use Fabric’s Data Factory or scripts to identify and delete obsolete datasets, backups, or temporary tables in OneLake.
+		○ Set Retention Policies: Configure retention policies for logs, audit data, or staging tables to automatically expire data after a defined period.
+		○ Tip: Use Microsoft Purview to catalog and classify data, making it easier to identify candidates for archiving or deletion.
+	3. Minimize Data Redundancy:
+		○ Centralize Data in OneLake: Avoid duplicating data across workspaces or external storage accounts. Use OneLake’s unified namespace to share data across domains and workloads.
+		○ Use Shortcuts: Create shortcuts in OneLake to reference data in external sources (e.g., S3, ADLS Gen2) instead of copying it, reducing storage costs.
+		○ Tip: Audit workspace storage with Fabric’s admin monitoring tools to detect redundant datasets.
+	4. Optimize Data Movement:
+		○ Reduce Data Egress: Minimize data transfers out of OneLake to external regions or services, as egress incurs additional costs. Keep Fabric workloads in the same Azure region as OneLake.
+		○ Use Lakehouse for Staging: Process data within Fabric’s Lakehouse to avoid intermediate storage in external systems.
+		○ Tip: Monitor data transfer costs in Azure Cost Management to identify high-egress scenarios.
+	5. Monitor Storage Usage:
+		○ Use Fabric’s admin portal to track storage consumption by workspace or domain.
+		○ Integrate with Azure Monitor to set alerts for unexpected storage growth (e.g., due to unoptimized ETL pipelines).
+		○ Tip: Regularly review storage metrics in OneLake to identify large or unused datasets for optimization.
+
+General Best Practices for Cost Management
+	1. Conduct Regular Cost Reviews:
+		○ Perform monthly or quarterly reviews using Azure Cost Management and Fabric’s monitoring tools to identify waste (e.g., oversized capacities, unused storage).
+		○ Involve business stakeholders to align costs with project priorities.
+	2. Educate Teams:
+		○ Train data engineers and analysts on cost-aware practices, such as writing efficient Spark code or using Direct Lake mode.
+		○ Foster a Center of Excellence (CoE) to share best practices and enforce cost policies.
+	3. Automate Cost Controls:
+		○ Use Azure Policy to enforce cost-saving measures, such as restricting high-cost SKUs or mandating tags.
+		○ Automate cleanup scripts (e.g., via Data Factory pipelines) to remove temporary data or pause capacities.
+	4. Leverage Free Tools and Trials:
+		○ Use Fabric’s free trial (available at https://learn.microsoft.com/en-us/fabric/) to test workloads without incurring costs.
+		○ Explore Azure Advisor recommendations for Fabric-related cost savings, such as resizing capacities or optimizing storage.
+
+Key Tools and Resources
+	• Azure Cost Management + Billing: Track and analyze compute and storage costs (https://azure.microsoft.com/en-us/services/cost-management/).
+	• Fabric Admin Portal: Monitor capacity and storage usage (https://learn.microsoft.com/en-us/fabric/admin/).
+	• Microsoft Purview: Catalog and govern data to optimize storage (https://learn.microsoft.com/en-us/purview/).
+	• Azure Advisor: Get personalized cost-saving recommendations (https://azure.microsoft.com/en-us/services/advisor/).
+	• Microsoft Learn: Free training on Fabric cost management (https://learn.microsoft.com/en-us/training/paths/get-started-fabric/).
+
+Example Cost-Saving Scenario
+Scenario: A company runs a daily ETL pipeline in Fabric using a Spark cluster and stores 10 TB of data in OneLake.
+Issues: The cluster is over-provisioned (F64 capacity, underutilized), and data is unpartitioned, leading to high storage and query costs.
+Optimizations:
+	• Downsize to an F16 capacity with auto-scaling enabled, saving ~50% on compute costs.
+	• Partition data by date and apply Snappy compression, reducing storage by 20%.
+	• Pause the capacity overnight, saving 8 hours of compute daily.
+	• Use Direct Lake mode for Power BI reports, eliminating data duplication.
+Result: ~40% reduction in monthly costs, with no performance impact.
