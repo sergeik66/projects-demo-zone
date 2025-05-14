@@ -170,21 +170,24 @@ SAMPLE_PAYLOAD = {
     "loadGroupB": [{"files": []}],
 }
 
+# Define mock_globals dictionary explicitly
+MOCK_GLOBALS = {
+    "feed_name": "claims_bop_demo",
+    "run_id": "f4b58b89-aaa7-45d9-b301-82fe25c28de9",
+    "elt_id": "016d62c1-d885-4936-8d29-80b09868f589",
+    "product_name": "BOP",
+    "source_system": "Curated",
+    "invocation_id": "f4b58b89-aaa7-45d9-b301-82fe25c28de9",
+    "elt_start_date_time": "12/12/2024 13:19:26",
+    "processing_start_time": "12/12/2024 13:19:26",
+    "zone_name": "Product",
+    "stage_name": "Transformation",
+}
+
 # Mock global variables fixture
 @pytest.fixture
 def mock_globals():
-    return {
-        "feed_name": "claims_bop_demo",
-        "run_id": "f4b58b89-aaa7-45d9-b301-82fe25c28de9",
-        "elt_id": "016d62c1-d885-4936-8d29-80b09868f589",
-        "product_name": "BOP",
-        "source_system": "Curated",
-        "invocation_id": "f4b58b89-aaa7-45d9-b301-82fe25c28de9",
-        "elt_start_date_time": "12/12/2024 13:19:26",
-        "processing_start_time": "12/12/2024 13:19:26",
-        "zone_name": "Product",
-        "stage_name": "Transformation",
-    }
+    return MOCK_GLOBALS
 
 # Mock LakehouseManager
 @pytest.fixture
@@ -321,7 +324,7 @@ SAMPLE_PAYLOAD = {json.dumps(SAMPLE_PAYLOAD)}
 # Mock globals
 @pytest.fixture
 def mock_globals():
-    return {json.dumps(mock_globals().__dict__['return_value'])}
+    return {json.dumps(MOCK_GLOBALS)}
 
 @pytest.fixture
 def mock_lakehouse_manager():
@@ -411,35 +414,7 @@ def test_get_spark_max_workers_env_vars(mocker):
 def test_process_file(mocker, mock_spark_engine, mock_lakehouse_manager, mock_globals):
     mocker.patch.dict(globals(), mock_globals)
     mocker.patch("builtins.SparkEngine", mock_spark_engine)
-    mocker.patch("builtins.LakehouseManager", return_value=mock_lakehouse_manager)
-    mock_process_data = mocker.patch("builtins.process_data")
-    file_info = {{"fileName": "dim_catastrophe", "modelConfigFolderName": "demo_product"}}
-    missing_params = ["workspace_id"]
-    process_file(file_info, missing_params)
-    mock_process_data.assert_called_once()
-    call_kwargs = mock_process_data.call_args[1]
-    assert call_kwargs["product_config_path"] == "abfss://test@lakehouse/Files/demo_product/dim_catastrophe.yaml"
-    assert call_kwargs["file_name"] == "dim_catastrophe"
-"""
-
-# Write test code to a temporary file
-try:
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir='/tmp') as temp_file:
-        temp_file.write(test_code)
-        temp_file_path = temp_file.name
-except OSError:
-    # Fallback to abfss path if /tmp is not writable (e.g., in Fabric)
-    temp_file_path = f"abfss://test@onelake.dfs.fabric.microsoft.com/test/Files/test_{uuid4()}.py"
-    nu.fs.put(temp_file_path, test_code, True)
-
-# Run pytest
-print("Running pytest tests...")
-result = pytest.main([temp_file_path, "-v"])
-
-# Clean up
-try:
-    os.unlink(temp_file_path)
-except:
+    mocker.patch("builtins.Lake
     nu.fs.rm(temp_file_path)
 
 print(f"Pytest completed with exit code: {result}")
