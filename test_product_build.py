@@ -1,3 +1,13 @@
+_______________________ ERROR collecting tmpfq2wu1w3.py ________________________
+ImportError while importing test module '/tmp/tmpfq2wu1w3.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../jupyter-env/python3.11/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+/tmp/tmpfq2wu1w3.py:8: in <module>
+    from data_processing import (
+E   ModuleNotFoundError: No module named 'data_processing'
+
 %pip install pytest pytest-mock
 import pytest
 print(pytest.__version__)
