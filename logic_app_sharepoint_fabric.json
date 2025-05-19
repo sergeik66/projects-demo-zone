@@ -1,0 +1,66 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {
+      "HTTP": {
+        "inputs": {
+          "authentication": {
+            "audience": "https://api.fabric.microsoft.com",
+            "type": "ManagedServiceIdentity"
+          },
+          "body": {
+            "parameters": {
+              "param_waitsec": 10
+            }
+          },
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "method": "POST",
+          "uri": "https://api.fabric.microsoft.com/v1/workspaces/@{parameters('workspaceID')}/items/@{parameters('pipelineID')}/jobs/instances?jobType=Pipeline"
+        },
+        "runAfter": {},
+        "type": "Http"
+      }
+    },
+    "parameters": {
+      "workspaceID": {
+        "defaultValue": "your-workspace-id",
+        "type": "String"
+      },
+      "pipelineID": {
+        "defaultValue": "your-pipeline-id",
+        "type": "String"
+      }
+    },
+    "triggers": {
+      "When_a_file_is_created_(properties_only)": {
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+            }
+          },
+          "method": "get",
+          "path": "/datasets/@{encodeURIComponent('https://yourcompany.sharepoint.com/sites/yoursite')}/triggers/onnewfile",
+          "queries": {
+            "folderId": "/Shared Documents/YourFolder",
+            "libraryName": "Documents"
+          }
+        },
+        "type": "ApiConnection"
+      }
+    }
+  },
+  "parameters": {
+    "$connections": {
+      "value": {
+        "sharepointonline": {
+          "connectionId": "/subscriptions/your-subscription-id/resourceGroups/your-resource-group/providers/Microsoft.Web/connections/sharepointonline",
+          "connectionName": "sharepointonline",
+          "id": "/subscriptions/your-subscription-id/providers/Microsoft.Web/locations/your-region/managedApis/sharepointonline"
+        }
+      }
+    }
+  }
+}
