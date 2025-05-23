@@ -3,8 +3,8 @@ import fsspec
 import os
 from spark_engine.common.email_util import get_secret_notebookutils
 
-# Generate a new RSA key pair
-key, _ = pgpy.PGPKey.new(pgpy.constants.PubKeyAlgorithm.RSAEncryptOrSign, 2048)
+# Generate a new RSA key pair (use the same key pair for both encryption and decryption)
+key = pgpy.PGPKey.new(pgpy.constants.PubKeyAlgorithm.RSAEncryptOrSign, 2048)
 
 # Add a User ID to the key
 uid = pgpy.PGPUID.new("Test User", email="test@example.com")
@@ -41,7 +41,16 @@ pgp = PGP(
 )
 
 # Encrypt a file
+input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/deduplication_msg.json"
+output_encrypted_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/output"
 pgp.encrypt_file(
-    input_file="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/deduplication_msg.json",
-    output_path="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/output"
+    input_file=input_file,
+    output_path=output_encrypted_path
+)
+
+# Decrypt the file
+pgp.decrypt_file(
+    input_file=f"{output_encrypted_path}/deduplication_msg.json.pgp",
+    output_path="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/decrypted",
+    passphrase=None  # Set to None since the private key is unprotected
 )
