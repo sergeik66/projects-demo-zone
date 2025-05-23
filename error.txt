@@ -1,4 +1,35 @@
- # Write to a temporary local file
+ValueError: Failed to load PGP keys: encoding without a string argument
+# Generate a new key pair
+key = pgpy.PGPKey.new(pgpy.constants.PubKeyAlgorithm.RSAEncryptOrSign, 2048)
+
+# Extract the public and private keys
+MOCK_PUBLIC_KEY = key.pubkey
+MOCK_PRIVATE_KEY = key
+
+# Save the keys to files (optional)
+with open('mock_public_key.asc', 'w') as pub_file:
+    pub_file.write(str(MOCK_PUBLIC_KEY))
+
+with open('mock_private_key.asc', 'w') as priv_file:
+    priv_file.write(str(MOCK_PRIVATE_KEY))
+
+# Initialize with secrets from key vault
+pgp = PGP(
+    key_vault_name="",
+    public_key_secret="",
+    private_key_secret="",
+    public_key=MOCK_PUBLIC_KEY.__str__(),
+    private_key=MOCK_PRIVATE_KEY.__str__()
+)
+
+# Encrypt a file
+pgp.encrypt_file(
+    input_file="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/deduplication_msg.json",
+    output_path="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/output"
+)
+
+
+# Write to a temporary local file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as temp_file:
             temp_path = temp_file.name
             temp_file.write(file_content)
