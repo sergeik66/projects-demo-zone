@@ -56,9 +56,10 @@ pgp.decrypt_file(
 )
 
 from pgp import PGP  # Adjust import based on your module structure
+import fsspec
 
 def decrypt_file(
-    input_file: str,
+    input_folder: str,
     output_path: str,
     pgp_enabled: bool,
     key_vault_name: str = None,
@@ -67,11 +68,11 @@ def decrypt_file(
     passphrase: str = None
 ) -> None:
     """
-    Decrypt a file using PGP if pgp_enabled is True and required parameters are provided.
+    Decrypt all files with .pgp extension in the input folder using PGP if pgp_enabled is True and required parameters are provided.
     
     Args:
-        input_file: Path to the encrypted input file (e.g., .pgp file).
-        output_path: Directory path for the decrypted output file.
+        input_folder: Path to the folder containing encrypted files (e.g., .pgp files).
+        output_path: Directory path for the decrypted output files.
         pgp_enabled: Flag to enable/disable PGP decryption.
         key_vault_name: Name of the key vault for retrieving secrets (optional).
         private_key_secret: Secret name for the private key (optional).
@@ -79,9 +80,10 @@ def decrypt_file(
         passphrase: Passphrase for the private key (optional).
     
     Raises:
-        ValueError: If pgp_enabled is True but key_vault_name or private_key_secret is None.
-        FileNotFoundError: If the input file does not exist.
-        IOError: If decryption or file operations fail.
+        ValueError: If pgp_enabled is True but key_vault_name or private_key_secret is None,
+                    or if no .pgp files are found in the input folder.
+        FileNotFoundError: If the input folder does not exist.
+        IOError: If decryption or file operations fail for any file.
     """
     if not pgp_enabled:
         print("PGP decryption is disabled. Skipping decryption.")
@@ -90,6 +92,22 @@ def decrypt_file(
     if key_vault_name is None or private_key_secret is None:
         raise ValueError("key_vault_name and private_key_secret must be provided when pgp_enabled is True.")
 
+    # Initialize fsspec filesystem for OneLake
+    fs = fsspec.filesystem(
+        "abfss",
+        account_name="onelake",
+        account_host="onelake.dfs.fabric.microsoft.com"
+    )
+
+    # Check if the input folder exists
+    if not fs.exists(input_folder):
+        raise FileNotFoundError(f"Input folder not found: {input_folder}")
+
+    # List files in the input folder and filter for .pgp extension
+    files = [f for f in fs.ls(input_folder, detail=False) if f.lower().endswith(".pgp")]
+    if not files:
+        raise ValueError(f"No .pgp files found in {input_folder}")
+
     # Initialize PGP class
     pgp = PGP(
         key_vault_name=key_vault_name,
@@ -97,13 +115,18 @@ def decrypt_file(
         private_key_secret=private_key_secret
     )
     
-    # Decrypt the file
-    pgp.decrypt_file(
-        input_file=input_file,
-        output_path=output_path,
-        passphrase=passphrase
-    )
-    print(f"File decrypted successfully to {output_path}")
+    # Decrypt each .pgp file
+    for input_file in files:
+        try:
+            pgp.decrypt_file(
+                input_file=input_file,
+                output_path=output_path,
+                passphrase=passphrase
+            )
+            print(f"File {input_file} decrypted successfully to {output_path}")
+        except Exception as e:
+            print(f"Failed to decrypt {input_file}: {str(e)}")
+            raise IOError(f"Failed to decrypt {input_file}: {str(e)}")
 
 # Example usage in the notebook
 pgp_enabled = True
@@ -113,7 +136,7 @@ public_key_secret = "public-key-secret"
 passphrase = "my-passphrase"
 
 decrypt_file(
-    input_file="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/output/deduplication_msg.json.pgp",
+    input_folder="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/output",
     output_path="abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/decrypted",
     pgp_enabled=pgp_enabled,
     key_vault_name=key_vault_name,
