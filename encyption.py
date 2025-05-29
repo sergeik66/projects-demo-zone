@@ -127,4 +127,22 @@ class PGP:
             raise FileNotFoundError(f"Input file not found: {input_file}")
             
         try:
-            with self.onelake_fs
+            with self.onelake_fs.open(input_file, "rb") as rb_file:
+                enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
+                
+            decrypted_message = (
+                self.privkey.unlock(self.passphrase).__enter__().decrypt(enc_message).message
+                if self.privkey.is_protected
+                else self.privkey.decrypt(enc_message).message
+            )
+            
+            file_name = os.path.basename(input_file).removesuffix(".pgp")
+            decrypted_path = os.path.join(output_path, file_name)
+            
+            mode = "wb" if isinstance(decrypted_message, (bytes, bytearray)) else "w"
+            with self.onelake_fs.open(decrypted_path, mode) as w_file:
+                w_file.write(decrypted_message)
+                
+            return self
+        except Exception as e:
+            raise IOError(f"Failed to decrypt file: {str(e)}")
