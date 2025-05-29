@@ -22,3 +22,13 @@ CREATE TABLE IF NOT EXISTS {table_identifier}
         PARTITIONED BY (product_name, feed_name, source_system, dataset_name)
         LOCATION '{table_path}'
         TBLPROPERTIES(delta.autoOptimize.optimizeWrite = true)
+
+
+    def _get_gx_validator(self):
+        context = gx.get_context()
+        asset = context.data_sources.add_spark("spark").add_dataframe_asset(
+            "data-quality"
+        )
+        return context.get_validator(
+            batch_request=asset.build_batch_request({"dataframe": self.batch_data})
+        )
