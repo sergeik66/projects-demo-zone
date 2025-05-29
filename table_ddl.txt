@@ -32,3 +32,13 @@ CREATE TABLE IF NOT EXISTS {table_identifier}
         return context.get_validator(
             batch_request=asset.build_batch_request({"dataframe": self.batch_data})
         )
+
+_shared_context = gx.get_context()
+_context_lock = threading.Lock()
+
+def _get_gx_validator(self):
+    with _context_lock:
+        asset = _shared_context.data_sources.add_spark("spark").add_dataframe_asset("data-quality")
+        return _shared_context.get_validator(
+            batch_request=asset.build_batch_request({"dataframe": self.batch_data})
+        )
