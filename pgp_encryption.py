@@ -1,137 +1,115 @@
-import fsspec
 import pgpy
-import os
-from typing import Optional, Union
+import fsspec
 from spark_engine.common.email_util import get_secret_notebookutils
 
 class PGP:
-    """A class to handle PGP encryption and decryption of files using fsspec and pgpy."""
-    
     def __init__(
         self,
-        key_vault_name: str,
-        file_system_code: str = "abfss",
-        public_key_secret: Optional[str] = None,
-        private_key_secret: Optional[str] = None,
-        public_key: Optional[str] = None,
-        private_key: Optional[str] = None
-    ) -> None:
+        key_vault_name: str = None,
+        public_key_secret: str = None,
+        private_key_secret: str = None,
+        private_key: str = None,
+        passphrase_secret: str = None
+    ):
         """
-        Initialize the PGP class with key vault and file system configurations.
-        
-        Args:
-            key_vault_name: Name of the key vault for retrieving secrets.
-            file_system_code: File system protocol (default: "abfss").
-            public_key_secret: Secret name for public key (optional).
-            private_key_secret: Secret name for private key (optional).
-            public_key: Public key string (optional, used if public_key_secret is None).
-            private_key: Private key string (optional, used if private_key_secret is None).
-        
-        Raises:
-            ValueError: If neither secret nor key is provided for public/private key.
-        """
-        self.onelake_fs = fsspec.filesystem(
-            file_system_code,
-            account_name="onelake",
-            account_host="onelake.dfs.fabric.microsoft.com"
-        )
-        
-        # Validate and load keys
-        if not public_key_secret and not public_key:
-            raise ValueError("Either public_key_secret or public_key must be provided.")
-        if not private_key_secret and not private_key:
-            raise ValueError("Either private_key_secret or private_key must be provided.")
-            
-        self.public_key = (
-            get_secret_notebookutils(public_key_secret, key_vault_name)
-            if public_key_secret
-            else public_key
-        )
-        self.private_key = (
-            get_secret_notebookutils(private_key_secret, key_vault_name)
-            if private_key_secret
-            else private_key
-        )
-        
-        try:
-            self.pubkey, _ = pgpy.PGPKey.from_blob(self.public_key)
-            self.privkey, _ = pgpy.PGPKey.from_blob(self.private_key)
-        except Exception as e:
-            raise ValueError(f"Failed to load PGP keys: {str(e)}")
+        Initialize PGP class for encryption and decryption.
 
-    def encrypt_file(self, input_file: str, output_path: str) -> 'PGP':
-        """
-        Encrypt a file using the public key and save it to the output path.
-        
         Args:
-            input_file: Path to the input file.
-            output_path: Directory path for the encrypted output file.
-        
-        Returns:
-            Self for method chaining.
-        
-        Raises:
-            FileNotFoundError: If input file does not exist.
-            IOError: If file operations fail.
-        """
-        if not self.onelake_fs.exists(input_file):
-            raise FileNotFoundError(f"Input file not found: {input_file}")
-            
-        try:
-            with self.onelake_fs.open(input_file, "rb") as rb_file:
-                file_message = pgpy.PGPMessage.new(rb_file.read(), file=True)
-            encrypted_message = self.pubkey.encrypt(file_message)
-            
-            file_name = os.path.basename(input_file) + ".pgp"
-            encrypted_path = os.path.join(output_path, file_name)
-            
-            with self.onelake_fs.open(encrypted_path, "w") as w_file:
-                w_file.write(str(encrypted_message))
-                
-            return self
-        except Exception as e:
-            raise IOError(f"Failed to encrypt file: {str(e)}")
+            key_vault_name: Name of the Azure Key Vault.
+            public_key_secret: Secret name for the public key in the key vault.
+            private_key_secret: Secret name for the private key in the key vault (optional if private_key is provided).
+            private_key: Private key as a string (e.g., from keyring).
+            passphrase_secret: Secret name for the passphrase in the key vault (optional).
 
-    def decrypt_file(self, input_file: str, output_path: str, passphrase: Optional[str] = None) -> 'PGP':
+        Raises:
+            ValueError: If required parameters are missing or keys cannot be loaded.
         """
-        Decrypt a file using the private key and save it to the output path.
-        
+        self.key_vault_name = key_vault_name
+        self.public_key_secret = public_key_secret
+        self.private_key_secret = private_key_secret
+        self.passphrase_secret = passphrase_secret
+        self.public_key = None
+        self.private_key = None
+        self.passphrase = None
+
+        # Load public key from key vault
+        if key_vault_name and public_key_secret:
+            try:
+                public_key_str = get_secret_notebookutils(public_key_secret, key_vault_name)
+                self.public_key, _ = pgpy.PGPKey.from_blob(public_key_str)
+            except Exception as e:
+                raise ValueError(f"Failed to load public key from key vault: {str(e)}")
+
+        # Load private key from keyring or key vault
+        if private_key:
+            try:
+                self.private_key, _ = pgpy.PGPKey.from_blob(private_key)
+            except Exception as e:
+                raise ValueError(f"Failed to load private key from provided string: {str(e)}")
+        elif key_vault_name and private_key_secret:
+            try:
+                private_key_str = get_secret_notebookutils(private_key_secret, key_vault_name)
+                self.private_key, _ = pgpy.PGPKey.from_blob(private_key_str)
+            except Exception as e:
+                raise ValueError(f"Failed to load private key from key vault: {str(e)}")
+
+        # Load passphrase from key vault
+        if key_vault_name and passphrase_secret:
+            try:
+                self.passphrase = get_secret_notebookutils(passphrase_secret, key_vault_name)
+            except Exception as e:
+                raise ValueError(f"Failed to load passphrase from key vault: {str(e)}")
+
+    def decrypt_file(self, input_file: str, output_path: str, passphrase: str = None):
+        """
+        Decrypt a file using the private key.
+
         Args:
-            input_file: Path to the encrypted input file.
+            input_file: Path to the encrypted file (e.g., .pgp).
             output_path: Directory path for the decrypted output file.
-            passphrase: Passphrase for the private key (optional).
-        
-        Returns:
-            Self for method chaining.
-        
+            passphrase: Passphrase to unlock the private key (optional if loaded from key vault).
+
         Raises:
-            FileNotFoundError: If input file does not exist.
-            ValueError: If passphrase is required but not provided.
-            IOError: If file operations or decryption fail.
+            FileNotFoundError: If the input file does not exist.
+            IOError: If decryption or file operations fail.
+            ValueError: If private key or passphrase is missing.
         """
-        if not self.onelake_fs.exists(input_file):
+        if not self.private_key:
+            raise ValueError("Private key is not loaded")
+
+        # Use passphrase from key vault if available, otherwise use provided passphrase
+        effective_passphrase = self.passphrase if self.passphrase else passphrase
+        if self.private_key.is_protected and not effective_passphrase:
+            raise ValueError("Passphrase is required for protected private key")
+
+        # Initialize fsspec filesystem
+        fs = fsspec.filesystem("abfss", account_name="onelake", account_host="onelake.dfs.fabric.microsoft.com")
+
+        # Check if input file exists
+        if not fs.exists(input_file):
             raise FileNotFoundError(f"Input file not found: {input_file}")
-            
+
+        # Read encrypted file
         try:
-            with self.onelake_fs.open(input_file, "rb") as rb_file:
-                enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
-                
-            if self.privkey.is_protected and not passphrase:
-                raise ValueError("Passphrase required for protected private key.")
-                
-            decrypted_message = (
-                self.privkey.unlock(passphrase).decrypt(enc_message).message
-                if self.privkey.is_protected
-                else self.privkey.decrypt(enc_message).message
-            )
-            
-            file_name = os.path.basename(input_file).removesuffix(".pgp")
-            decrypted_path = os.path.join(output_path, file_name)
-            
-            mode = "wb" if isinstance(decrypted_message, (bytes, bytearray)) else "w"
-            with self.onelake_fs.open(decrypted_path, mode) as w_file:
-                w_file.write(decrypted_message)
-                
-            return self
+            with fs.open(input_file, "rb") as f:
+                encrypted_message = pgpy.PGPMessage.from_blob(f.read())
         except Exception as e:
-            raise IOError(f"Failed to decrypt file: {str(e)}")
+            raise IOError(f"Failed to read encrypted file {input_file}: {str(e)}")
+
+        # Decrypt the message
+        try:
+            if self.private_key.is_protected:
+                with self.private_key.unlock(effective_passphrase):
+                    decrypted_message = self.private_key.decrypt(encrypted_message).message
+            else:
+                decrypted_message = self.private_key.decrypt(encrypted_message).message
+        except Exception as e:
+            raise IOError(f"Failed to decrypt file {input_file}: {str(e)}")
+
+        # Write decrypted file
+        output_file = os.path.join(output_path, os.path.basename(input_file).replace(".pgp", ""))
+        try:
+            with fs.open(output_file, "wb") as f:
+                f.write(decrypted_message)
+        except Exception as e:
+            raise IOError(f"Failed to write decrypted file {output_file}: {str(e)}")
