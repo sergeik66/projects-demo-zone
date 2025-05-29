@@ -4,17 +4,18 @@ import os
 from typing import Optional, Union
 from spark_engine.common.email_util import get_secret_notebookutils
 
-class PGP():
+class PGP:
     """A class to handle PGP encryption and decryption of files using fsspec and pgpy."""
 
     def __init__(
-            self,
-            key_vault_name: str,
-            file_system_code: str = "abfss",
-            public_key_secret: Optional[str] = None,
-            private_key_secret: Optional[str] = None,
-            public_key: Optional[str] = None,
-            private_key: Optional[str] = None
+        self,
+        key_vault_name: str,
+        file_system_code: str = "abfss",
+        public_key_secret: Optional[str] = None,
+        private_key_secret: Optional[str] = None,
+        public_key: Optional[str] = None,
+        private_key: Optional[str] = None,
+        passphrase_secret: Optional[str] = None
     ) -> None:
         """
         Initialize the PGP class with key vault and file system configurations.
@@ -26,9 +27,11 @@ class PGP():
             private_key_secret: Secret name for private key (optional).
             public_key: Public key string (optional, used if public_key_secret is None).
             private_key: Private key string (optional, used if private_key_secret is None).
+            passphrase_secret: Secret name for the passphrase in the key vault (optional).
         
         Raises:
-            ValueError: If neither secret nor key is provided for public/private key.
+            ValueError: If neither secret nor key is provided for public/private key,
+                        or if passphrase_secret is missing for a protected private key.
         """
         self.onelake_fs = fsspec.filesystem(
             file_system_code,
@@ -58,6 +61,18 @@ class PGP():
             self.privkey, _ = pgpy.PGPKey.from_blob(self.private_key)
         except Exception as e:
             raise ValueError(f"Failed to load PGP keys: {str(e)}")
+
+        # Load passphrase from key vault if provided
+        self.passphrase = None
+        if passphrase_secret:
+            try:
+                self.passphrase = get_secret_notebookutils(passphrase_secret, key_vault_name)
+            except Exception as e:
+                raise ValueError(f"Failed to load passphrase from key vault: {str(e)}")
+        
+        # Validate passphrase for protected private key
+        if self.privkey.is_protected and not self.passphrase:
+            raise ValueError("Passphrase secret is required for protected private key.")
 
     def encrypt_file(self, input_file: str, output_path: str) -> 'PGP':
         """
@@ -92,14 +107,13 @@ class PGP():
         except Exception as e:
             raise IOError(f"Failed to encrypt file: {str(e)}")
         
-    def decrypt_file(self, input_file: str, output_path: str, passphrase: Optional[str] = None) -> 'PGP':
+    def decrypt_file(self, input_file: str, output_path: str) -> 'PGP':
         """
         Decrypt a file using the private key and save it to the output path.
         
         Args:
             input_file: Path to the encrypted input file.
             output_path: Directory path for the decrypted output file.
-            passphrase: Passphrase for the private key (optional).
         
         Returns:
             Self for method chaining.
@@ -113,25 +127,4 @@ class PGP():
             raise FileNotFoundError(f"Input file not found: {input_file}")
             
         try:
-            with self.onelake_fs.open(input_file, "rb") as rb_file:
-                enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
-                
-            if self.privkey.is_protected and not passphrase:
-                raise ValueError("Passphrase required for protected private key.")
-                
-            decrypted_message = (
-                self.privkey.unlock(passphrase).decrypt(enc_message).message
-                if self.privkey.is_protected
-                else self.privkey.decrypt(enc_message).message
-            )
-            
-            file_name = os.path.basename(input_file).removesuffix(".pgp")
-            decrypted_path = os.path.join(output_path, file_name)
-            
-            mode = "wb" if isinstance(decrypted_message, (bytes, bytearray)) else "w"
-            with self.onelake_fs.open(decrypted_path, mode) as w_file:
-                w_file.write(decrypted_message)
-                
-            return self
-        except Exception as e:
-            raise IOError(f"Failed to decrypt file: {str(e)}")
+            with self.onelake_fs
