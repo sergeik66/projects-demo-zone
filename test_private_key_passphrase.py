@@ -8,3 +8,13 @@ try:
         print("Private key unlocked successfully")
 except pgpy.errors.PGPError as e:
     print(f"Passphrase error: {str(e)}")
+
+pgp = PGP(
+    key_vault_name="my-key-vault",
+    public_key_secret="mock-public-key-secret",
+    private_key_secret="mock-private-key-secret",
+    passphrase_secret="mock-passphrase-secret"
+)
+input_file = "abfss://.../Files/user_data/pdos_webreport/decrypted/BOP PD & OS.xlsx"
+output_path = "abfss://.../Files/user_data/pdos_webreport/encrypted"
+pgp.encrypt_file(input_file, output_path)  # Re-encrypt to ensure key match
