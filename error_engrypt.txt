@@ -1,0 +1,48 @@
+TypeError                                 Traceback (most recent call last)
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:97, in PGP.encrypt_file(self, input_file, output_path)
+     96 with self.onelake_fs.open(input_file, "rb") as rb_file:
+---> 97     file_message = pgpy.PGPMessage.new(rb_file.read(), file=True)
+     98 encrypted_message = self.pubkey.encrypt(file_message)
+
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/fsspec/spec.py:2077, in AbstractBufferedFile.read(self, length)
+   2076 if length < 0:
+-> 2077     length = self.size - self.loc
+   2078 if self.closed:
+
+TypeError: unsupported operand type(s) for -: 'NoneType' and 'int'
+
+During handling of the above exception, another exception occurred:
+
+OSError                                   Traceback (most recent call last)
+Cell In[16], line 56, in encrypt_files(input_folder, output_folder, pgp_enabled)
+     55 try:
+---> 56     pgp.encrypt_file(input_file, output_folder)
+     57     logger.info(f"Encrypted {input_file} successfully")
+
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:108, in PGP.encrypt_file(self, input_file, output_path)
+    107 except Exception as e:
+--> 108     raise IOError(f"Failed to encrypt file: {str(e)}")
+
+OSError: Failed to encrypt file: unsupported operand type(s) for -: 'NoneType' and 'int'
+
+During handling of the above exception, another exception occurred:
+
+OSError                                   Traceback (most recent call last)
+Cell In[19], line 6
+      2 pgp_enabled = True
+      4 try:
+      5     # Encrypt files from decrypted to encrypted folder
+----> 6     encrypt_files(
+      7         input_folder=base_path,
+      8         output_folder=encrypted_folder,
+      9         pgp_enabled=pgp_enabled
+     10     )
+     11 except Exception as e:
+     12     logger.error(f"Error during processing: {str(e)}")
+
+Cell In[16], line 60, in encrypt_files(input_folder, output_folder, pgp_enabled)
+     58 except Exception as e:
+     59     logger.error(f"Failed to encrypt {input_file}: {str(e)}")
+---> 60     raise IOError(f"Failed to encrypt {input_file}: {str(e)}")
+
+OSError: Failed to encrypt ab08da5e-0f71-423b-a811-bd0af21f182b/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/decrypted: Failed to encrypt file: unsupported operand type(s) for -: 'NoneType' and 'int'
