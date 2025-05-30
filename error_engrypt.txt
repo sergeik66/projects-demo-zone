@@ -1,48 +1,60 @@
-TypeError                                 Traceback (most recent call last)
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:97, in PGP.encrypt_file(self, input_file, output_path)
-     96 with self.onelake_fs.open(input_file, "rb") as rb_file:
----> 97     file_message = pgpy.PGPMessage.new(rb_file.read(), file=True)
-     98 encrypted_message = self.pubkey.encrypt(file_message)
+NotImplementedError                       Traceback (most recent call last)
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:131, in PGP.decrypt_file(self, input_file, output_path)
+    130 with self.onelake_fs.open(input_file, "rb") as rb_file:
+--> 131     enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
+    133 decrypted_message = (
+    134     self.privkey.unlock(self.passphrase).__enter__().decrypt(enc_message).message
+    135     if self.privkey.is_protected
+    136     else self.privkey.decrypt(enc_message).message
+    137 )
 
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/fsspec/spec.py:2077, in AbstractBufferedFile.read(self, length)
-   2076 if length < 0:
--> 2077     length = self.size - self.loc
-   2078 if self.closed:
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/types.py:198, in Armorable.from_blob(cls, blob)
+    197 else:
+--> 198     po = obj.parse(bytearray(blob))
+    200 if po is not None:
 
-TypeError: unsupported operand type(s) for -: 'NoneType' and 'int'
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/pgp.py:1293, in PGPMessage.parse(self, packet)
+   1292 while len(data) > 0:
+-> 1293     self |= Packet(data)
+
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/pgp.py:1080, in PGPMessage.__or__(self, other)
+   1078     return self
+-> 1080 raise NotImplementedError(str(type(other)))
+
+NotImplementedError: <class 'pgpy.packet.types.Opaque'>
 
 During handling of the above exception, another exception occurred:
 
 OSError                                   Traceback (most recent call last)
-Cell In[16], line 56, in encrypt_files(input_folder, output_folder, pgp_enabled)
+Cell In[31], line 56, in decrypt_files(input_folder, output_folder, pgp_enabled)
      55 try:
----> 56     pgp.encrypt_file(input_file, output_folder)
-     57     logger.info(f"Encrypted {input_file} successfully")
+---> 56     pgp.decrypt_file(input_file, output_folder)
+     57     logger.info(f"Decrypted {input_file} successfully")
 
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:108, in PGP.encrypt_file(self, input_file, output_path)
-    107 except Exception as e:
---> 108     raise IOError(f"Failed to encrypt file: {str(e)}")
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:148, in PGP.decrypt_file(self, input_file, output_path)
+    147 except Exception as e:
+--> 148     raise IOError(f"Failed to decrypt file: {str(e)}")
 
-OSError: Failed to encrypt file: unsupported operand type(s) for -: 'NoneType' and 'int'
+OSError: Failed to decrypt file: <class 'pgpy.packet.types.Opaque'>
 
 During handling of the above exception, another exception occurred:
 
 OSError                                   Traceback (most recent call last)
-Cell In[19], line 6
+Cell In[34], line 6
       2 pgp_enabled = True
       4 try:
-      5     # Encrypt files from decrypted to encrypted folder
-----> 6     encrypt_files(
+      5     # Decrypt files from encrypted to decrypted folder
+----> 6     decrypt_files(
       7         input_folder=base_path,
-      8         output_folder=encrypted_folder,
+      8         output_folder=decrypted_folder,
       9         pgp_enabled=pgp_enabled
      10     )
      11 except Exception as e:
      12     logger.error(f"Error during processing: {str(e)}")
 
-Cell In[16], line 60, in encrypt_files(input_folder, output_folder, pgp_enabled)
+Cell In[31], line 60, in decrypt_files(input_folder, output_folder, pgp_enabled)
      58 except Exception as e:
-     59     logger.error(f"Failed to encrypt {input_file}: {str(e)}")
----> 60     raise IOError(f"Failed to encrypt {input_file}: {str(e)}")
+     59     logger.error(f"Failed to decrypt {input_file}: {str(e)}")
+---> 60     raise IOError(f"Failed to decrypt {input_file}: {str(e)}")
 
-OSError: Failed to encrypt ab08da5e-0f71-423b-a811-bd0af21f182b/7c6d771a-3b6f-4042-8a89-1a885973a93c/Files/templates/emails/decrypted: Failed to encrypt file: unsupported operand type(s) for -: 'NoneType' and 'int'
+OSError: Failed to decrypt ab08da5e-0f71-423b-a811-bd0af21f182b/f1da4f29-81af-4030-9190-889e5fa725bf/Files/landing/testfileforFabric.xlsx.gpg: Failed to decrypt file: <class 'pgpy.packet.types.Opaque'>
