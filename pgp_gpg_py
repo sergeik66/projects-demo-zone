@@ -1,0 +1,169 @@
+import fsspec
+import pgpy
+import os
+import subprocess
+from typing import Optional, Union
+from spark_engine.common.email_util import get_secret_notebookutils
+
+class PGP:
+    """A class to handle PGP and GPG encryption/decryption of files using fsspec and pgpy."""
+    def __init__(
+        self,
+        key_vault_name: str,
+        file_system_code: str = "abfss",
+        public_key_secret: Optional[str] = None,
+        private_key_secret: Optional[str] = None,
+        public_key: Optional[str] = None,
+        private_key: Optional[str] = None,
+        passphrase_secret: Optional[str] = None,
+        use_gpg_fallback: bool = False
+    ) -> None:
+        self.onelake_fs = fsspec.filesystem(
+            file_system_code,
+            account_name="onelake",
+            account_host="onelake.dfs.fabric.microsoft.com",
+            client_id=os.getenv("AZURE_CLIENT_ID"),
+            client_secret=os.getenv("AZURE_CLIENT_SECRET"),
+            tenant_id=os.getenv("AZURE_TENANT_ID")
+        )
+        self.use_gpg_fallback = use_gpg_fallback
+        
+        if not public_key_secret and not public_key:
+            raise ValueError("Either public_key_secret or public_key must be provided.")
+        if not private_key_secret and not private_key:
+            raise ValueError("Either private_key_secret or private_key must be provided.")
+            
+        self.public_key = (
+            get_secret_notebookutils(public_key_secret, key_vault_name)
+            if public_key_secret
+            else public_key
+        )
+        self.private_key = (
+            get_secret_notebookutils(private_key_secret, key_vault_name)
+            if private_key_secret
+            else private_key
+        )
+        
+        try:
+            self.pubkey, _ = pgpy.PGPKey.from_blob(self.public_key)
+            self.privkey, _ = pgpy.PGPKey.from_blob(self.private_key)
+        except Exception as e:
+            raise ValueError(f"Failed to load PGP keys: {str(e)}")
+
+        self.passphrase = None
+        if passphrase_secret:
+            try:
+                self.passphrase = get_secret_notebookutils(passphrase_secret, key_vault_name).strip()
+            except Exception as e:
+                raise ValueError(f"Failed to load passphrase from key vault: {str(e)}")
+        
+        if self.privkey.is_protected:
+            if not self.passphrase:
+                raise ValueError("Passphrase secret is required for protected private key.")
+            # Validate passphrase
+            try:
+                with self.privkey.unlock(self.passphrase):
+                    pass
+            except pgpy.errors.PGPError as e:
+                raise ValueError(f"Invalid passphrase for private key: {str(e)}")
+
+    def encrypt_file(self, input_file: str, output_path: str) -> 'PGP':
+        if not self.onelake_fs.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+            
+        try:
+            # Read file in chunks
+            chunks = []
+            with self.onelake_fs.open(input_file, "rb") as rb_file:
+                while True:
+                    chunk = rb_file.read(8192)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+            file_content = b"".join(chunks)
+            file_message = pgpy.PGPMessage.new(file_content, file=True)
+            encrypted_message = self.pubkey.encrypt(file_message)
+            
+            file_name = os.path.basename(input_file) + ".pgp"
+            encrypted_path = os.path.join(output_path, file_name)
+            
+            with self.onelake_fs.open(encrypted_path, "w") as w_file:
+                w_file.write(str(encrypted_message))
+                
+            return self
+        except Exception as e:
+            raise IOError(f"Failed to encrypt file: {str(e)}")
+        
+    def decrypt_file(self, input_file: str, output_path: str) -> 'PGP':
+        if not self.onelake_fs.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+            
+        try:
+            # Read file in chunks
+            chunks = []
+            with self.onelake_fs.open(input_file, "rb") as rb_file:
+                while True:
+                    chunk = rb_file.read(8192)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+            encrypted_content = b"".join(chunks)
+            
+            # Try pgpy decryption
+            try:
+                enc_message = pgpy.PGPMessage.from_blob(encrypted_content)
+                decrypted_message = (
+                    self.privkey.unlock(self.passphrase).__enter__().decrypt(enc_message).message
+                    if self.privkey.is_protected
+                    else self.privkey.decrypt(enc_message).message
+                )
+            except (NotImplementedError, pgpy.errors.PGPError) as e:
+                if not self.use_gpg_fallback:
+                    raise ValueError(f"Unsupported PGP/GPG format or passphrase error in {input_file}: {str(e)}")
+                # Fallback to GPG
+                return self._decrypt_with_gpg(input_file, output_path)
+            
+            file_name = os.path.basename(input_file).removesuffix(".gpg").removesuffix(".pgp")
+            decrypted_path = os.path.join(output_path, file_name)
+            
+            mode = "wb" if isinstance(decrypted_message, (bytes, bytearray)) else "w"
+            with self.onelake_fs.open(decrypted_path, mode) as w_file:
+                w_file.write(decrypted_message)
+                
+            return self
+        except Exception as e:
+            raise IOError(f"Failed to decrypt file: {str(e)}")
+
+    def _decrypt_with_gpg(self, input_file: str, output_path: str) -> 'PGP':
+        """Fallback to GPG command-line tool for decryption."""
+        try:
+            # Save private key and passphrase temporarily
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".key") as key_file:
+                key_file.write(self.private_key)
+                key_file_path = key_file.name
+            with tempfile.NamedTemporaryFile(mode="w", delete=False) as pass_file:
+                pass_file.write(self.passphrase)
+                pass_file_path = pass_file.name
+
+            # Prepare output path
+            file_name = os.path.basename(input_file).removesuffix(".gpg").removesuffix(".pgp")
+            decrypted_path = os.path.join(output_path, file_name)
+
+            # Run GPG command
+            cmd = [
+                "gpg", "--batch", "--yes",
+                "--passphrase-file", pass_file_path,
+                "--import", key_file_path,
+                "--output", decrypted_path,
+                "--decrypt", input_file
+            ]
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return self
+        except subprocess.CalledProcessError as e:
+            raise IOError(f"GPG decryption failed for {input_file}: {e.stderr}")
+        finally:
+            # Clean up temporary files
+            for path in (key_file_path, pass_file_path):
+                if os.path.exists(path):
+                    os.unlink(path)
