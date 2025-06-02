@@ -1,3 +1,74 @@
+private_key_str = get_secret_notebookutils(private_key_secret, key_vault_name)
+passphrase = get_secret_notebookutils(passphrase_secret, key_vault_name)
+
+privkey, _ = pgpy.PGPKey.from_blob(private_key_str)
+try:
+    with privkey.unlock(passphrase):
+        print("Private key unlocked successfully")
+except pgpy.errors.PGPError as e:
+    print(f"Passphrase error: {str(e)}")
+Private key unlocked successfully
+
+# check if file was encrypted with the corresponding piublic key
+pgp = PGP(
+    key_vault_name=key_vault_name,
+    public_key_secret=public_key_secret,
+    private_key_secret=private_key_secret,
+    passphrase_secret=passphrase_secret
+)
+input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/BOP PD & OS.xlsx"
+output_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted"
+pgp.encrypt_file(input_file, output_path)  # Re-encrypt to ensure key match
+
+pgp = PGP(
+    key_vault_name=key_vault_name,
+    public_key_secret=public_key_secret,
+    private_key_secret=private_key_secret,
+    passphrase_secret=passphrase_secret
+)
+input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted/BOP PD & OS.xlsx.pgp"
+output_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/decrypted"
+pgp.decrypt_file(input_file, output_path)
+
+---------------------------------------------------------------------------
+PGPError                                  Traceback (most recent call last)
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:134, in PGP.decrypt_file(self, input_file, output_path)
+    131     enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
+    133 decrypted_message = (
+--> 134     self.privkey.unlock(self.passphrase).__enter__().decrypt(enc_message).message
+    135     if self.privkey.is_protected
+    136     else self.privkey.decrypt(enc_message).message
+    137 )
+    139 file_name = os.path.basename(input_file).removesuffix(".pgp")
+
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/decorators.py:128, in KeyAction.__call__.<locals>._action(key, *args, **kwargs)
+    127 with self.usage(key, kwargs.get('user', None)) as _key:
+--> 128     self.check_attributes(key)
+    130     # do the thing
+
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/decorators.py:114, in KeyAction.check_attributes(self, key)
+    113 if getattr(key, attr) != expected:
+--> 114     raise PGPError("Expected: {attr:s} == {eval:s}. Got: {got:s}"
+    115                    "".format(attr=attr, eval=str(expected), got=str(getattr(key, attr))))
+
+PGPError: Expected: is_unlocked == True. Got: False
+
+During handling of the above exception, another exception occurred:
+
+OSError                                   Traceback (most recent call last)
+Cell In[94], line 10
+      8 input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted/BOP PD & OS.xlsx.pgp"
+      9 output_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/decrypted"
+---> 10 pgp.decrypt_file(input_file, output_path)
+
+File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp.py:148, in PGP.decrypt_file(self, input_file, output_path)
+    146     return self
+    147 except Exception as e:
+--> 148     raise IOError(f"Failed to decrypt file: {str(e)}")
+
+OSError: Failed to decrypt file: Expected: is_unlocked == True. Got: False
+
+
 # Generate key with minimal User ID
 key = pgpy.PGPKey.new(pgpy.constants.PubKeyAlgorithm.RSAEncryptOrSign, 2048)
 uid = pgpy.PGPUID.new("Anonymous")  # Minimal User ID
