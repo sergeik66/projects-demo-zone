@@ -1,3 +1,5 @@
+OSError: Failed to encrypt ab08da5e-0f71-423b-a811-bd0af21f182b/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/massive_claims/BOP_Massive_ClaimNum.csv: Failed to encrypt file: Key is not complete - please add a User ID!
+
 ValueError: Failed to load PGP keys: encoding without a string argument
 # Generate a new key pair
 key = pgpy.PGPKey.new(pgpy.constants.PubKeyAlgorithm.RSAEncryptOrSign, 2048)
