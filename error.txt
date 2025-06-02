@@ -1,4 +1,16 @@
-OSError: Failed to encrypt ab08da5e-0f71-423b-a811-bd0af21f182b/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/massive_claims/BOP_Massive_ClaimNum.csv: Failed to encrypt file: Key is not complete - please add a User ID!
+# Generate key with minimal User ID
+key = pgpy.PGPKey.new(pgpy.constants.PubKeyAlgorithm.RSAEncryptOrSign, 2048)
+uid = pgpy.PGPUID.new("Anonymous")  # Minimal User ID
+key.add_uid(
+    uid,
+    usage={pgpy.constants.KeyFlags.EncryptCommunications, pgpy.constants.KeyFlags.EncryptStorage},
+    hashes=[pgpy.constants.HashAlgorithm.SHA256],
+    ciphers=[pgpy.constants.SymmetricKeyAlgorithm.AES256]
+)
+passphrase = "my-passphrase"
+key.protect(passphrase, pgpy.constants.SymmetricKeyAlgorithm.AES256, pgpy.constants.HashAlgorithm.SHA256)
+public_key = str(key.pubkey)
+private_key = str(key)
 
 ValueError: Failed to load PGP keys: encoding without a string argument
 # Generate a new key pair
