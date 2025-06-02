@@ -1,8 +1,8 @@
-Passphrase length: 16
-Passphrase start: E$&#k
+Passphrase length: 28
+Passphrase start: Sunse
 Private key start: -----BEGIN PGP PRIVATE KEY BLOCK-----
 
-xcMFBGg9oVc
+xcMGBGg912E
 ---------------------------------------------------------------------------
 PGPError                                  Traceback (most recent call last)
 File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp_6_2.py:125, in PGP.decrypt_file(self, input_file, output_path)
@@ -29,9 +29,9 @@ PGPError: Expected: is_unlocked == True. Got: False
 During handling of the above exception, another exception occurred:
 
 OSError                                   Traceback (most recent call last)
-Cell In[25], line 10
-      8 input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted2/BOP PD & OS.xlsx.pgp"
-      9 output_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/decrypted2"
+Cell In[43], line 10
+      8 input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted/BOP PD & OS.xlsx.pgp"
+      9 output_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/decrypted"
 ---> 10 pgp.decrypt_file(input_file, output_path)
 
 File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp_6_2.py:139, in PGP.decrypt_file(self, input_file, output_path)
