@@ -1,42 +1,15 @@
-Passphrase length: 28
-Passphrase start: Sunse
-Private key start: -----BEGIN PGP PRIVATE KEY BLOCK-----
-
-xcMGBGg912E
----------------------------------------------------------------------------
-PGPError                                  Traceback (most recent call last)
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp_6_2.py:125, in PGP.decrypt_file(self, input_file, output_path)
-    123 enc_message = pgpy.PGPMessage.from_blob(encrypted_content)
-    124 decrypted_message = (
---> 125     self.privkey.unlock(self.passphrase).__enter__().decrypt(enc_message).message
-    126     if self.privkey.is_protected
-    127     else self.privkey.decrypt(enc_message).message
-    128 )
-    130 file_name = os.path.basename(input_file).removesuffix(".pgp")
-
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/decorators.py:128, in KeyAction.__call__.<locals>._action(key, *args, **kwargs)
-    127 with self.usage(key, kwargs.get('user', None)) as _key:
---> 128     self.check_attributes(key)
-    130     # do the thing
-
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/pgpy/decorators.py:114, in KeyAction.check_attributes(self, key)
-    113 if getattr(key, attr) != expected:
---> 114     raise PGPError("Expected: {attr:s} == {eval:s}. Got: {got:s}"
-    115                    "".format(attr=attr, eval=str(expected), got=str(getattr(key, attr))))
-
-PGPError: Expected: is_unlocked == True. Got: False
-
-During handling of the above exception, another exception occurred:
-
-OSError                                   Traceback (most recent call last)
-Cell In[43], line 10
-      8 input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted/BOP PD & OS.xlsx.pgp"
-      9 output_path = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/decrypted"
----> 10 pgp.decrypt_file(input_file, output_path)
-
-File ~/cluster-env/clonedenv/lib/python3.11/site-packages/spark_engine/common/pgp_6_2.py:139, in PGP.decrypt_file(self, input_file, output_path)
-    137     return self
-    138 except Exception as e:
---> 139     raise IOError(f"Failed to decrypt file: {str(e)}")
-
-OSError: Failed to decrypt file: Expected: is_unlocked == True. Got: False
+from spark_engine.common.email_util import get_secret_notebookutils
+import pgpy
+private_key_str = get_secret_notebookutils("mock-private-key-secret", "my-key-vault")
+passphrase = get_secret_notebookutils("mock-passphrase-secret", "my-key-vault")
+privkey, _ = pgpy.PGPKey.from_blob(private_key_str)
+input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted/BOP PD & OS.xlsx.pgp"
+fs = fsspec.filesystem("abfss", account_name="onelake", account_host="onelake.dfs.fabric.microsoft.com", client_id=os.getenv("AZURE_CLIENT_ID"), client_secret=os.getenv("AZURE_CLIENT_SECRET"), tenant_id=os.getenv("AZURE_TENANT_ID"))
+with fs.open(input_file, "rb") as rb_file:
+    enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
+try:
+    with privkey.unlock(passphrase):
+        decrypted_message = privkey.decrypt(enc_message).message
+        print("Decryption successful")
+except pgpy.errors.PGPError as e:
+    print(f"Decryption failed: {str(e)}")
