@@ -74,7 +74,7 @@
                     "type": "string"
                 },
                 "sourceSystemType": {
-                     "$ref": "enums.json#/definitions/sourceSystemType"
+                    "$ref": "enums.json#/definitions/sourceSystemType"
                 },
                 "ingestType": {
                     "$ref": "enums.json#/definitions/ingestType"
@@ -83,7 +83,7 @@
                     "type": "string"
                 },
                 "lakehouseName": {
-                        "type": "string"
+                    "type": "string"
                 },
                 "filesDirectoryName": {
                     "type": "string"
@@ -94,13 +94,25 @@
                         "type": "string"
                     },
                     "minItems": 1
+                },
+                "pgpEnabled": {
+                    "type": "boolean"
+                },
+                "privateKeySecret": {
+                    "type": "string"
+                },
+                "passphraseSecret": {
+                    "type": "string"
+                },
+                "publicKeySecret": {
+                    "type": "string"
                 }
             },
             "required": [
                 "sourceSystemName",
                 "sourceSystemType",
                 "ingestType",
-                "isPGPEnabled"
+                "pgpEnabled"
             ],
             "allOf": [
                 {
@@ -143,6 +155,22 @@
                     "then": {
                         "required": [
                             "sftpFolderList"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "pgpEnabled": {
+                                "const": true
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "privateKeySecret",
+                            "passphraseSecret",
+                            "publicKeySecret"
                         ]
                     }
                 }
