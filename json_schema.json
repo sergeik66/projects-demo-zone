@@ -1,0 +1,153 @@
+{
+    "datasetName": "massive_claims",
+    "enable": true,
+    "datasetTypeName": "file",
+    "fileType": "csv",
+    "isStaticFileName": false,
+    "skipCuratedLoad": false,
+    "sourceSystemProperties": {
+        "sourceSystemName": "demo_file",
+        "sourceSystemType": "lakehouse",
+        "ingestType": "watermark",
+        "sourceWatermarkIdentifier": "LastModifiedDateTime",
+        "lakehouseName": "den_lhw_pdi_001_raw",
+        "filesDirectoryName": "user_data/massive_claims",
+        "pgpEnabled": true,
+        "privateKeySecret": "distro-delauth-private-key-pgp",
+        "passphraseSecret": "distro-delauth-passphrase-pgp",
+        "publicKeySecret": "distro-delauth-ftp-public-key-pgp"
+    }
+}
+
+{
+    "definitions": {
+        "database": {
+            "type": "object",
+            "properties": {
+                "sourceSystemName": {
+                    "type": "string"
+                },
+                "includeSpecificColumns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1
+                },
+                "filterExpression": {
+                    "type": "string",
+                    "pattern": "(?i)^and "
+                },
+                "ingestType": {
+                    "$ref": "enums.json#/definitions/ingestType"
+                },
+                "sourceWatermarkIdentifier": {
+                    "type": "string"
+                },
+                "isDynamicQuery": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "sourceSystemName",
+                "ingestType",
+                "isDynamicQuery"
+            ],
+            "if": {
+                "properties": {
+                    "ingestType": {
+                        "const": "watermark"
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "sourceWatermarkIdentifier"
+                ]
+            },
+            "additionalProperties": false
+        },
+        "file": {
+            "type": "object",
+            "properties": {
+                "sourceSystemName": {
+                    "type": "string"
+                },
+                "sourceSystemType": {
+                     "$ref": "enums.json#/definitions/sourceSystemType"
+                },
+                "ingestType": {
+                    "$ref": "enums.json#/definitions/ingestType"
+                },
+                "sourceWatermarkIdentifier": {
+                    "type": "string"
+                },
+                "lakehouseName": {
+                        "type": "string"
+                },
+                "filesDirectoryName": {
+                    "type": "string"
+                },
+                "sftpFolderList": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1
+                }
+            },
+            "required": [
+                "sourceSystemName",
+                "sourceSystemType",
+                "ingestType",
+                "isPGPEnabled"
+            ],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "ingestType": {
+                                "const": "watermark"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "sourceWatermarkIdentifier"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "sourceSystemType": {
+                                "const": "lakehouse"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "lakehouseName",
+                            "filesDirectoryName"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "sourceSystemType": {
+                                "const": "sftp"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "sftpFolderList"
+                        ]
+                    }
+                }
+            ],
+            "additionalProperties": true
+        }
+    }
+}
