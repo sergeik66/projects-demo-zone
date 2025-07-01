@@ -1,0 +1,102 @@
+main:        o----o (v1.0.0) -------------------o (v1.1.0)
+              \                               /
+release:       \                             /
+                o----o----o (release/v1.1.0)
+                     |    |
+feature:             f1   f2
+hotfix:                    h1 (hotfix/v1.1.1) ----o (v1.1.1)
+                                                  \
+develop:       o----o----o----o----o----o----o-----o
+
+Legend:o: Commit
+main: Stable production branch
+develop: Integration branch for ongoing development
+release/v1.1.0: Release branch created from main
+f1, f2: Feature branches merged into release/v1.1.0
+h1: Hotfix branch created from main (post-deployment)
+v1.1.0, v1.1.1: Version tags on main after deployment
+
+Explanation of the WorkflowThe diagram represents a release branch-based workflow where the release branch is created from main, used for preparing a production release, and merged back to main after deployment. Here’s how the workflow unfolds:Starting Point:The main branch is at a stable state, tagged with v1.0.0, representing the current production code.
+The develop branch contains ongoing development work, including features not yet ready for production.
+
+Creating the Release Branch:A release branch (release/v1.1.0) is created from main to prepare for the next production release.
+This ensures the release starts with the stable production codebase, avoiding untested changes from develop.
+
+Incorporating Features:Feature branches (f1, f2) are developed in parallel, typically branched from develop.
+Once tested and approved, these feature branches are merged into the release branch (release/v1.1.0) to include new functionality for the upcoming release.
+Bug fixes or release-specific changes (e.g., version bumps, configuration tweaks) are also committed directly to the release branch.
+
+Testing and Finalization:The release branch undergoes rigorous testing (e.g., QA, integration, or user acceptance testing).
+Any necessary fixes are applied directly to the release branch to ensure stability.
+
+Production Deployment:Once validated, the release branch is deployed to production.
+After successful deployment, the release branch is merged back into main, and a version tag (v1.1.0) is created on main to mark the release.
+
+Synchronizing with Develop:The release branch is also merged into develop to ensure that all fixes and changes made during the release process are incorporated into ongoing development.
+The release branch is then deleted, as it is no longer needed.
+
+Hotfixes (Post-Deployment):If a critical issue is discovered in production, a hotfix branch (hotfix/v1.1.1) is created from main at the v1.1.0 tag.
+Fixes are applied, tested, and merged back into both main (tagged as v1.1.1) and develop to maintain consistency.
+The hotfix branch is deleted after merging.
+
+Key Points of the DiagramBranches:main: Remains stable and only updated with production-ready code.
+release/v1.1.0: Temporary branch for preparing and testing the release.
+develop: Ongoing development branch, synchronized with release and hotfix changes.
+feature and hotfix: Short-lived branches for specific tasks.
+
+Merges:Features (f1, f2) merge into release/v1.1.0.
+release/v1.1.0 merges into main and develop post-deployment.
+hotfix/v1.1.1 merges into main and develop for production fixes.
+
+Tags:v1.1.0 and v1.1.1 on main mark production releases.
+
+Advantages IllustratedIsolation: The release branch isolates release preparation from develop’s ongoing work and main’s stability.
+Traceability: Tags on main (v1.1.0, v1.1.1) provide clear versioning.
+Parallel Work: Feature development continues on develop while the release is prepared.
+Stability: main only receives tested, production-ready code.
+
+  Git Commands for the Workflow
+
+# Create release branch from main
+git checkout main
+git branch release/v1.1.0
+git checkout release/v1.1.0
+
+# Merge features into release branch
+git merge --no-ff feature/login-system
+git merge --no-ff feature/payment-module
+
+# Commit fixes or tweaks in release branch
+git commit -m "Fix version number for release v1.1.0"
+
+# Merge release into main and tag
+git checkout main
+git merge --no-ff release/v1.1.0
+git tag v1.1.0
+
+# Merge release into develop
+git checkout develop
+git merge --no-ff release/v1.1.0
+
+# Delete release branch
+git branch -d release/v1.1.0
+
+# Create hotfix branch from main
+git checkout main
+git branch hotfix/v1.1.1
+git checkout hotfix/v1.1.1
+
+# Commit hotfix
+git commit -m "Fix critical bug in v1.1.1"
+
+# Merge hotfix into main and tag
+git checkout main
+git merge --no-ff hotfix/v1.1.1
+git tag v1.1.1
+
+# Merge hotfix into develop
+git checkout develop
+git merge --no-ff hotfix/v1.1.1
+
+# Delete hotfix branch
+git branch -d hotfix/v1.1.1
