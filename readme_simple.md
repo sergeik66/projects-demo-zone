@@ -181,6 +181,32 @@ Azure Pipelines automates the workflow using a `.yaml` file stored in the `DevOp
      ```
    - Pipeline de commercially available software, such as desktop applications or enterprise systems with distinct version releases.
 
+### 7. **Rollback to Previous Release**
+   - Identify the previous release tag (e.g., `v1.0.0`) using:
+     ```bash
+     git tag --list
+     ```
+   - Create a rollback branch from the desired tag:
+     ```bash
+     git checkout v1.0.0
+     git branch rollback/v1.0.0
+     git checkout rollback/v1.0.0
+     git push origin rollback/v1.1.0
+     ```
+   - Create a PR to merge `rollback/v1.0.0` into `main`:
+     ```bash
+     git checkout main
+     git merge --no-ff rollback/v1.0.0
+     git tag v1.1.0-rollback
+     git push origin main v1.1.0-rollback
+     ```
+   - Pipeline deploys `main` to the production Fabric workspace using `fabric-prod` variables.
+   - Delete the rollback branch:
+     ```bash
+     git branch -d rollback/v1.0.0
+     git push origin --delete rollback/v1.0.0
+     ```
+   - **Note**: Rolling back reverts `main` to the state of the previous tag (e.g., `v1.0.0`). Ensure any critical fixes from the rolled-back version (e.g., `v1.1.0`) are re-applied in a new feature or hotfix branch if needed.
 ---
 
 ### **GitHub Flow**
