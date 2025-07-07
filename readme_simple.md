@@ -332,3 +332,17 @@ Azure Pipelines automates the workflow using a `.yaml` file stored in the `DevOp
   - **Example**: A startup’s e-commerce website with daily updates.
 
 ---
+Best PracticesBranch Policies: Enforce PRs, minimum reviewers, and build validation for main in Azure DevOps.
+Secure Variables: Store sensitive data (e.g., FABRIC_CONNECTION_STRING) in Library variable groups with restricted access.
+Automated Testing: Include unit, integration, and end-to-end tests in the pipeline.
+Clean Up Branches: Delete feature/*, release/*, hotfix/*, and rollback/* branches after merging.
+Monitor Pipelines: Use Azure DevOps dashboards or notifications (e.g., Teams, email) to track pipeline status.
+Version Tagging: Tag main with version numbers (e.g., v1.1.0) and rollback tags (e.g., v1.1.0-rollback) for traceability.
+Rollback Planning: Test rollback branches in staging before merging to main to ensure stability.
+
+TroubleshootingMerge Conflicts: Resolve in Azure DevOps PRs or locally using git rebase or git merge.
+Pipeline Failures: Check pipeline logs in Azure DevOps for test or deployment errors.
+Variable Issues: Ensure variable groups (fabric-dev, fabric-prod) are correctly linked and accessible.
+Fabric Deployment: Verify Fabric workspace configurations and credentials in variable groups.
+Rollback Issues: Confirm the correct tag (e.g., v1.0.0) is used and test the rollback branch in staging before deployment.
+
