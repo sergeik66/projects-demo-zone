@@ -102,6 +102,15 @@ To ensure **no interdependencies** between data products:
 - **Modular Code Structure**: Organize the repository with separate directories for each data product (e.g., `/productA`, `/productB`) to isolate code, configurations, and tests.
 - **Pipeline Isolation**: Configure the CI/CD pipeline to process only the relevant files for a data product based on the changed paths in a commit or PR (using `paths` filters in the YAML).
 - **Workspace-Specific Variables**: Use Library variable groups per data product and environment (e.g., `fabric-dev-productA`, `fabric-prod-productB`) to manage distinct Fabric workspace configurations.
+- **Artifacts Naming Convention**:
+  - **Rule 1: Product-Specific Prefix**: Name artifacts with a product-specific prefix to ensure uniqueness and avoid conflicts in the Azure DevOps pipeline.
+    - Example: `build-output-productA`, `build-output-productB`.
+  - **Rule 2: Version Inclusion**: Include the version number in artifact names for release, hotfix, and rollback builds to track specific builds.
+    - Example: `build-output-productA-v1.1.0`, `build-output-productB-v1.2.0`.
+  - **Rule 3: Consistent Format**: Use a consistent format: `<type>-<product>-<version>` (e.g., `build-productA-v1.1.0`, `test-productB-v1.2.0`).
+  - **Rule 4: Scope to Product Directory**: Ensure artifacts are generated from the product-specific directory (e.g., `/productA/dist`, `/productB/dist`) to maintain isolation.
+  - **Rule 5: Avoid Overwrites**: Configure the pipeline to publish artifacts to unique paths in Azure DevOps, preventing overwrites across products.
+    - Example: Publish to `$(System.DefaultWorkingDirectory)/$(productName)/dist` as `build-output-$(productName)`.
 
 ---
 
