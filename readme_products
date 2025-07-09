@@ -1,0 +1,458 @@
+# Gitflow-Inspired Workflow for Multiple Data Products with Azure DevOps CI/CD
+
+This document outlines a **Gitflow-inspired workflow** for managing a Git repository in **Azure DevOps** to develop and release **multiple data products** independently, without a `develop` branch. It provides step-by-step instructions for integrating with a **CI/CD pipeline** using `.yaml` files in the `DevOps` folder and **Library variable groups** per **Microsoft Fabric workspace**. The workflow ensures no interdependencies between data products by using isolated feature and release branches, with rollback capabilities via version tags.
+
+## Table of Contents
+1. [Overview of the Workflow](#overview-of-the-workflow)
+2. [Branch Types](#branch-types)
+3. [Workflow Description](#workflow-description)
+4. [Managing Multiple Data Products](#managing-multiple-data-products)
+5. [Azure DevOps Setup](#azure-devops-setup)
+6. [CI/CD Integration with Azure Pipelines](#cicd-integration-with-azure-pipelines)
+7. [Step-by-Step Instructions](#step-by-step-instructions)
+8. [Example Azure Pipelines YAML](#example-azure-pipelines-yaml)
+9. [Best Practices](#best-practices)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview of the Workflow
+
+This Gitflow-inspired workflow is designed for developing and releasing **multiple data products** (e.g., datasets, pipelines, or analytics models) in a single repository without creating interdependencies. It eliminates the `develop` branch, using `main` as the primary branch for production-ready code and feature integration. Short-lived `feature/*`, `release/*`, and `hotfix/*` branches are used for development, release preparation, and urgent fixes, respectively. Rollbacks are supported using version tags. The workflow is integrated with Azure DevOps and Microsoft Fabric for CI/CD and workspace management.
+
+### Key Features
+- **Independent Data Products**: Each data product is developed and released in isolated branches to avoid interdependencies.
+- **Simplified Branching**: Uses `main` as the single long-lived branch, with temporary feature, release, and hotfix branches.
+- **Stable Production Code**: The `main` branch reflects production-ready code for all data products.
+- **CI/CD Integration**: Automates testing, building, deployment, and rollback using Azure DevOps Pipelines.
+- **Rollback Capability**: Supports reverting to a previous release using version tags.
+
+---
+
+## Branch Types
+
+1. **`main` (or `master`)**
+   - Represents the production-ready codebase for all data products.
+   - Contains stable, deployed code with version tags (e.g., `v1.0.0-productA`, `v1.0.0-productB`).
+   - Serves as the base for feature, release, and hotfix branches.
+
+2. **Feature Branches**
+   - Short-lived branches for new features or changes for a specific data product (e.g., `feature/productA-login-system`, `feature/productB-data-pipeline`).
+   - Branched from `main`, merged into `release/*` branches or directly to `main`.
+
+3. **Release Branches**
+   - Created from `main` for preparing a production release for a specific data product (e.g., `release/v1.1.0-productA`).
+   - Used for final tweaks, bug fixes, and testing for that data product.
+   - Merged into `main` after deployment, then deleted.
+
+4. **Hotfix Branches**
+   - Created from `main` to fix critical production issues for a specific data product (e.g., `hotfix/v1.1.1-productA`).
+   - Merged into `main`, then deleted.
+
+5. **Rollback Branches**
+   - Created from a previous version tag to revert a data product to an earlier release (e.g., `rollback/v1.0.0-productA`).
+   - Merged into `main` and deployed, then deleted.
+
+---
+
+## Workflow Description
+
+The workflow supports independent development and release of multiple data products:
+
+1. **Feature Development**:
+   - Create feature branches from `main` for a specific data product.
+   - Merge into a release branch for that product or directly to `main` after testing and review.
+
+2. **Release Preparation**:
+   - Create a release branch from `main` for a specific data product (e.g., `release/v1.1.0-productA`).
+   - Merge relevant features, apply bug fixes, and test thoroughly.
+
+3. **Production Deployment**:
+   - Merge the release branch into `main` and tag it with a product-specific version (e.g., `v1.1.0-productA`).
+   - Deploy the data product to production from `main`.
+   - Delete the release branch.
+
+4. **Hotfixes**:
+   - Create a hotfix branch from `main` for urgent fixes to a specific data product.
+   - Merge back to `main` (with a new tag, e.g., `v1.1.1-productA`) and delete.
+
+5. **Rollback**:
+   - Revert a data product to a previous release by creating a rollback branch from a tagged version (e.g., `v1.0.0-productA`) and redeploying.
+
+### Diagram
+  main:        o----o (v1.0.0-productA) -------------------o (v1.1.0-productA)
+              \                                        /
+feature:       \                                      f1 (feature/productA-login)
+release:        \                                    /
+                 o----o----o (release/v1.1.0-productA)
+hotfix:                    h1 (hotfix/v1.1.1-productA) ----o (v1.1.1-productA)
+rollback:                       r1 (rollback/v1.0.0-productA) ----o (v1.0.0-productA-rollback)
+
+
+*Note*: Each data product (e.g., `productA`, `productB`) follows a similar branch structure in the same repository, with distinct naming conventions to avoid conflicts.
+
+---
+
+## Managing Multiple Data Products
+
+To ensure **no interdependencies** between data products:
+
+- **Isolated Branch Naming**: Use prefixes or suffixes in branch names (e.g., `feature/productA-*`, `release/v1.1.0-productB`) to clearly associate branches with specific data products.
+- **Independent Release Cycles**: Each data product has its own release branches and version tags (e.g., `v1.1.0-productA`, `v1.2.0-productB`), allowing independent release schedules.
+- **Modular Code Structure**: Organize the repository with separate directories for each data product (e.g., `/productA`, `/productB`) to isolate code, configurations, and tests.
+- **Pipeline Isolation**: Configure the CI/CD pipeline to process only the relevant files for a data product based on the changed paths in a commit or PR (using `paths` filters in the YAML).
+- **Workspace-Specific Variables**: Use Library variable groups per data product and environment (e.g., `fabric-dev-productA`, `fabric-prod-productB`) to manage distinct Fabric workspace configurations.
+
+---
+
+## Azure DevOps Setup
+
+Azure DevOps is used for repository management and CI/CD orchestration. Key components include:
+
+- **Repositories**: Host a single Git repository with `main` and product-specific branches.
+- **Pipelines**: Defined in `DevOps/azure-pipelines.yml` to automate testing, building, deployment, and rollback for each data product.
+- **Library Variable Groups**: Store environment-specific variables per data product and Fabric workspace (e.g., `fabric-dev-productA`, `fabric-prod-productA`).
+
+### Prerequisites
+- An Azure DevOps project with a Git repository.
+- Microsoft Fabric workspaces for development and production environments per data product.
+- Library variable groups set up in Azure DevOps (e.g., `fabric-dev-productA`, `fabric-prod-productA`, `fabric-dev-productB`, `fabric-prod-productB`) with variables like `FABRIC_CONNECTION_STRING` or `DEPLOYMENT_KEY`.
+
+---
+
+## CI/CD Integration with Azure Pipelines
+
+Azure Pipelines automates the workflow using `DevOps/azure-pipelines.yml`. The pipeline:
+- **CI**: Runs tests and builds on `feature/*`, `release/*`, `hotfix/*`, and `rollback/*` branches, filtering by data product paths.
+- **CD**: Deploys `main` to production for the relevant data product after release or hotfix merges; supports rollback to previous tagged versions.
+- **Variable Groups**: Uses product-specific Library variable groups to manage Fabric workspace settings.
+
+### Pipeline Goals
+- Validate code quality and functionality for each data product independently.
+- Automate deployment to Microsoft Fabric workspaces without cross-product interference.
+- Enable rollback to a previous release for a specific data product.
+- Ensure secure access to resources using variable groups.
+
+---
+
+## Step-by-Step Instructions
+
+### 1. **Set Up the Repository**
+   - Initialize a Git repository in Azure DevOps with a modular structure:
+     ```bash
+     git clone <azure-devops-repo-url>
+     cd <repo-name>
+     mkdir productA productB  # Create directories for each data product
+     git commit -m "Initial commit with product directories"
+     git push origin main
+     ```
+   - Protect the `main` branch in Azure DevOps:
+     - Go to **Repos > Branches**, select `main`, and enable **Branch Policies** (e.g., require PRs, minimum reviewers).
+
+### 2. **Configure Library Variable Groups**
+   - In Azure DevOps, go to **Pipelines > Library**.
+   - Create variable groups for each data product and environment:
+     - `fabric-dev-productA`: Variables like `FABRIC_CONNECTION_STRING`, `ENVIRONMENT=dev`, `PRODUCT=productA`.
+     - `fabric-prod-productA`: Variables like `FABRIC_CONNECTION_STRING`, `ENVIRONMENT=prod`, `PRODUCT=productA`.
+     - Repeat for `productB` (e.g., `fabric-dev-productB`, `fabric-prod-productB`).
+   - Link variable groups to pipelines with appropriate permissions.
+
+### 3. **Develop a Feature**
+   - Create a feature branch for a specific data product from `main`:
+     ```bash
+     git checkout main
+     git branch feature/productA-login-system
+     git checkout feature/productA-login-system
+     ```
+   - Commit changes in the product-specific directory (e.g., `/productA`):
+     ```bash
+     git add productA/
+     git commit -m "Add login system for productA"
+     git push origin feature/productA-login-system
+     ```
+   - Create a pull request in Azure DevOps to merge into a release branch or `main`.
+   - Pipeline runs tests (in `DevOps/azure-pipelines.yml`) on files in `/productA`.
+
+### 4. **Create a Release Branch**
+   - Create a release branch for a specific data product from `main`:
+     ```bash
+     git checkout main
+     git branch release/v1.1.0-productA
+     git checkout release/v1.1.0-productA
+     git push origin release/v1.1.0-productA
+     ```
+   - Merge feature branches or apply fixes for the data product:
+     ```bash
+     git merge --no-ff feature/productA-login-system
+     git commit -m "Update version to v1.1.0 for productA"
+     git push origin release/v1.1.0-productA
+     ```
+   - Pipeline tests and builds the release branch, using `fabric-dev-productA` variables.
+
+### 5. **Test and Validate Release**
+   - Run tests (e.g., unit, integration) on files in `/productA` via the pipeline.
+   - Deploy to a staging Fabric workspace for `productA` (using `fabric-dev-productA` variables).
+   - Fix issues in the release branch:
+     ```bash
+     git commit -m "Fix bug in release/v1.1.0-productA"
+     git push origin release/v1.1.0-productA
+     ```
+
+### 6. **Deploy to Production**
+   - Create a PR to merge `release/v1.1.0-productA` into `main`:
+     ```bash
+     git checkout main
+     git merge --no-ff release/v1.1.0-productA
+     git tag v1.1.0-productA
+     git push origin main v1.1.0-productA
+     ```
+   - Pipeline deploys `main` to the production Fabric workspace for `productA` using `fabric-prod-productA` variables.
+   - Delete the release branch:
+     ```bash
+     git branch -d release/v1.1.0-productA
+     git push origin --delete release/v1.1.0-productA
+     ```
+
+### 7. **Handle Hotfixes**
+   - Create a hotfix branch for a specific data product from `main`:
+     ```bash
+     git checkout main
+     git branch hotfix/v1.1.1-productA
+     git checkout hotfix/v1.1.1-productA
+     git push origin hotfix/v1.1.1-productA
+     ```
+   - Apply fixes in the product-specific directory:
+     ```bash
+     git commit -m "Fix critical bug in v1.1.1 for productA"
+     git push origin hotfix/v1.1.1-productA
+     ```
+   - Pipeline tests the hotfix branch using `fabric-dev-productA` variables.
+   - Merge into `main` and tag:
+     ```bash
+     git checkout main
+     git merge --no-ff hotfix/v1.1.1-productA
+     git tag v1.1.1-productA
+     git push origin main v1.1.1-productA
+     ```
+   - Pipeline deploys `main` to production for `productA` using `fabric-prod-productA` variables.
+   - Delete the hotfix branch:
+     ```bash
+     git branch -d hotfix/v1.1.1-productA
+     git push origin --delete hotfix/v1.1.1-productA
+     ```
+
+### 8. **Rollback to Previous Release**
+   - Identify the previous release tag for the data product (e.g., `v1.0.0-productA`):
+     ```bash
+     git tag --list | grep productA
+     ```
+   - Create a rollback branch from the desired tag:
+     ```bash
+     git checkout v1.0.0-productA
+     git branch rollback/v1.0.0-productA
+     git checkout rollback/v1.0.0-productA
+     git push origin rollback/v1.0.0-productA
+     ```
+   - Create a PR to merge `rollback/v1.0.0-productA` into `main`:
+     ```bash
+     git checkout main
+     git merge --no-ff rollback/v1.0.0-productA
+     git tag v1.0.0-productA-rollback
+     git push origin main v1.0.0-productA-rollback
+     ```
+   - Pipeline deploys `main` to the production Fabric workspace for `productA` using `fabric-prod-productA` variables.
+   - Delete the rollback branch:
+     ```bash
+     git branch -d rollback/v1.0.0-productA
+     git push origin --delete rollback/v1.0.0-productA
+     ```
+   - **Note**: Rolling back reverts `main` to the state of the previous tag for the specific data product. Ensure critical fixes from the rolled-back version (e.g., `v1.1.0-productA`) are re-applied in a new feature or hotfix branch if needed.
+
+---
+
+## Example Azure Pipelines YAML
+
+The CI/CD pipeline is defined in the `DevOps/azure-pipelines.yml` file in the repository. Below is an example configuration for automating the Gitflow-inspired process for multiple data products with Azure DevOps and Microsoft Fabric workspaces, including support for rollback deployments.
+
+```yaml
+# File: DevOps/azure-pipelines.yml
+
+trigger:
+  branches:
+    include:
+      - main
+      - feature/*
+      - release/*
+      - hotfix/*
+      - rollback/*
+  paths:
+    include:
+      - productA/*
+      - productB/*
+      # Add more product directories as needed
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - productA/*
+      - productB/*
+      # Add more product directories as needed
+
+variables:
+  - name: isMain
+    value: ${{ eq(variables['Build.SourceBranch'], 'refs/heads/main') }}
+  - name: productDir
+    value: $[ replace(variables['Build.SourceBranch'], 'refs/heads/', '') ]
+  - name: productName
+    value: $[ split(variables['productDir'], '-')[1] ]
+
+stages:
+  - stage: Test
+    displayName: 'Run Tests and Build'
+    jobs:
+      - job: TestAndBuild
+        pool:
+          vmImage: 'ubuntu-latest'
+        variables:
+          - group: $[ format('fabric-dev-{ lindsey-{0}', variables['productName']) ]  # Dynamic variable group per product
+        steps:
+          - checkout: self
+          - task: UseNode@1
+            inputs:
+              version: '16.x'
+          - script: |
+              npm install
+              npm test
+            displayName: 'Run Tests'
+            condition: and(succeeded(), startsWith(variables['productDir'], 'feature/') or startsWith(variables['productDir'], 'release/') or startsWith(variables['productDir'], 'hotfix/') or startsWith(variables['productDir'], 'rollback/'))
+            workingDirectory: $(productName)
+          - script: |
+              npm run lint
+            displayName: 'Lint Code'
+            condition: and(succeeded(), startsWith(variables['productDir'], 'feature/') or startsWith(variables['productDir'], 'release/') or startsWith(variables['productDir'], 'hotfix/') or startsWith(variables['productDir'], 'rollback/'))
+            workingDirectory: $(productName)
+          - script: |
+              npm run build
+            displayName: 'Build Artifact'
+            condition: and(succeeded(), startsWith(variables['productDir'], 'release/') or startsWith(variables['productDir'], 'hotfix/') or startsWith(variables['productDir'], 'rollback/'))
+            workingDirectory: $(productName)
+          - publish: $(System.DefaultWorkingDirectory)/$(productName)/dist
+            artifact: build-output-$(productName)
+            displayName: 'Publish Build Artifact'
+
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    condition: and(succeeded(), ne(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployStaging
+        environment: 'staging-$(productName)'
+        pool:
+          vmImage: 'ubuntu-latest'
+        variables:
+          - group: $[ format('fabric-dev-{0}', variables['productName']) ]
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+              - checkout: self
+              - script: |
+                  echo "Deploying to Fabric dev workspace for $(productName) with $(FABRIC_CONNECTION_STRING)"
+                  # Add Fabric deployment commands (e.g., az fabric deploy)
+                displayName: 'Deploy to Staging'
+                workingDirectory: $(productName)
+
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    condition: and(succeeded(), eq(variables['isMain'], true))
+    jobs:
+      - deployment: DeployProduction
+        environment: 'production-$(productName)'
+        pool:
+          vmImage: 'ubuntu-latest'
+        variables:
+          - group: $[ format('fabric-prod-{0}', variables['productName']) ]
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+              - checkout: self
+              - script: |
+                  echo "Deploying to Fabric prod workspace for $(productName) with $(FABRIC_CONNECTION_STRING)"
+                  # Add Fabric deployment commands (e.g., az fabric deploy)
+                displayName: 'Deploy to Production'
+                workingDirectory: $(productName)
+
+  ExplanationLocation: The pipeline is defined in DevOps/azure-pipelines.yml.
+Triggers: Runs on pushes to main, feature/*, release/*, hotfix/*, rollback/*, filtered by product directories (e.g., productA/*, productB/*).
+Variable Groups: Dynamically loads product-specific variable groups (e.g., fabric-dev-productA, fabric-prod-productA) based on the branch name.
+Path Filtering: Processes only the relevant product directory (e.g., /productA) to ensure isolation.
+Stages:Test: Runs tests, linting, and builds for product-specific changes.
+DeployStaging: Deploys non-main branches to staging Fabric workspaces.
+DeployProduction: Deploys main to production Fabric workspaces for the specific data product.
+
+Customization: Replace deployment scripts with Fabric-specific commands for each data product.
+
+
+
+  Best PracticesBranch Naming: Use clear, product-specific prefixes (e.g., feature/productA-*, release/v1.1.0-productB) to avoid confusion.
+Modular Structure: Maintain separate directories for each data product to ensure isolation.
+Path-Based Pipelines: Use path filters in the pipeline to process only the relevant product’s files.
+Secure Variables: Store sensitive data in product-specific Library variable groups with restricted access.
+Automated Testing: Include product-specific unit, integration, and end-to-end tests in the pipeline.
+Clean Up Branches: Delete feature/*, release/*, hotfix/*, and rollback/* branches after merging.
+Monitor Pipelines: Use Azure DevOps dashboards or notifications (e.g., Teams, email) to track pipeline status.
+Version Tagging: Use product-specific tags (e.g., v1.1.0-productA) for traceability and rollback.
+Rollback Planning: Test rollback branches in staging before merging to main.
+
+TroubleshootingMerge Conflicts: Resolve in Azure DevOps PRs or locally using git rebase or git merge.
+Pipeline Failures: Check pipeline logs for test or deployment errors specific to the data product.
+Variable Issues: Ensure product-specific variable groups (e.g., fabric-dev-productA) are correctly linked.
+Fabric Deployment: Verify Fabric workspace configurations and credentials in variable groups.
+Interdependencies: Ensure branch names and pipeline paths are correctly scoped to avoid cross-product interference.
+Rollback Issues: Confirm the correct product-specific tag (e.g., v1.0.0-productA) and test in staging.
+
+
+---
+
+### **Key Updates**
+1. **Multiple Data Products**:
+   - Added a new section, **Managing Multiple Data Products**, to address independent development and release cycles.
+   - Introduced product-specific branch naming (e.g., `feature/productA-*`, `release/v1.1.0-productB`) and version tags (e.g., `v1.1.0-productA`).
+   - Recommended a modular repository structure with separate directories (e.g., `/productA`, `/productB`).
+   - Ensured pipeline isolation using path filters and product-specific variable groups (e.g., `fabric-dev-productA`, `fabric-prod-productB`).
+
+2. **Rollback Step**:
+   - Retained the rollback step (Step 8) from the previous version, updated to use product-specific tags (e.g., `v1.0.0-productA`) for precise rollback of individual data products.
+   - Clarified that rollbacks are tested in staging and deployed to production for the specific product.
+
+3. **Pipeline Enhancements**:
+   - Updated `DevOps/azure-pipelines.yml` to include path-based triggers for product directories (e.g., `productA/*`, `productB/*`).
+   - Added dynamic variable group selection based on the product name extracted from the branch (e.g., `fabric-dev-productA`).
+   - Ensured pipeline stages process only the relevant data product’s files to prevent interdependencies.
+
+4. **No `develop` Branch**:
+   - Maintained the Gitflow-inspired workflow without a `develop` branch, with `main` as the primary branch for feature integration and releases.
+   - Release branches are created from `main`, as per your earlier query.
+
+5. **Azure DevOps and Fabric**:
+   - Continued use of **Library variable groups** for product-specific Fabric workspace configurations.
+   - Deployment steps remain placeholders, as Fabric-specific commands depend on your setup.
+
+### **How to Use**
+1. Save the `README.md` in your repository’s root directory.
+2. Create a `DevOps` folder and add `DevOps/azure-pipelines.yml` with the provided YAML content.
+3. Configure the Azure DevOps pipeline to use `DevOps/azure-pipelines.yml` under **Pipelines > Create Pipeline**.
+4. Set up **Library variable groups** for each data product and environment (e.g., `fabric-dev-productA`, `fabric-prod-productB`) in **Pipelines > Library**.
+5. Organize the repository with product-specific directories (e.g., `/productA`, `/productB`).
+6. Customize deployment scripts in the YAML file with Fabric-specific commands for each data product.
+7. Test rollbacks by creating product-specific `rollback/*` branches and verifying in staging before merging to `main`.
+
+### **Memory Integration**
+- Incorporated your interest in Microsoft Fabric (from previous conversations) by ensuring Fabric-specific variable groups and deployment considerations.
+- Drew on your familiarity with Azure DevOps and YAML pipelines to maintain a consistent setup.
+- Addressed your requirement for independent data product management, inspired by past discussions on modular data pipelines and schema validation.
+
+If you need specific Fabric deployment commands, additional pipeline customizations, or further details on managing multiple data products, let me know!
