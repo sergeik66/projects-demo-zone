@@ -1,0 +1,269 @@
+Below is a set of functional requirements for the insurance data product based on the provided business requirements. These requirements translate the business needs into specific, actionable, and measurable functionalities for the data product, designed to work with the Microsoft Fabric SQL Endpoint and the dimensional logical model previously outlined (Policy, Claims, and Customer Interaction fact tables with associated dimensions). The requirements focus on enabling efficiency analysis, book analysis, holistic customer views, submission flow tracking, timeframes, and self-service data access while ensuring performance and governance.Functional Requirements for Insurance Data ProductData Product Name: Insurance Analytics Data Product
+Platform: Microsoft Fabric SQL Endpoint (read-only interface for querying Delta tables in Fabric Lakehouse/Warehouse)
+Objective: Deliver a scalable, secure, and self-service analytics platform to support efficiency analysis, book analysis, customer insights, and submission flow tracking for the insurance industry, with robust time-based reporting and governance.1. Efficiency AnalysisBusiness Requirement: Enable insights into pricing competitiveness by providing submission, quote, bind counts, and related ratios, broken down by Line of Business (LOB), Carrier, Territory, Agency, and key policy characteristics.Functional Requirements:
+1.1 Submission, Quote, and Bind Metrics:The system must provide counts of submissions, quotes, and binds in the Policy_Fact table, with associated metrics:Submission Count: Number of policy submissions received.
+Quote Count: Number of policies quoted.
+Bind Count: Number of policies bound (issued).
+Ratios:Submission-to-Quote Ratio: Quote Count / Submission Count
+Quote-to-Bind Ratio: Bind Count / Quote Count
+Submission-to-Bind Ratio: Bind Count / Submission Count
+
+Metrics must be queryable via T-SQL on the SQL Endpoint.
+
+1.2 Breakdown Dimensions:The system must support filtering and grouping by the following dimensions in the Policy_Fact and related dimension tables:Line of Business (Product_Dimension.Product_Category, e.g., Auto, Home, Commercial).
+Carrier (Carrier_Dimension.Carrier_Name, a new dimension table for insurance carriers).
+Territory (Customer_Dimension.State, Customer_Dimension.ZIP_Code for geographic granularity).
+Agency (Agent_Dimension.Agency_Name, a new attribute in the Agent Dimension).
+Policy Characteristics:Policy_Fact.Effective_Date
+Policy_Fact.Submission_Date
+Policy_Dimension.Class_Code (e.g., insurance class codes for risk classification).
+Policy_Dimension.NAICS_Code (National Industry Classification System code).
+Policy_Dimension.Industry_Type (e.g., Retail, Manufacturing).
+Policy_Fact.Transaction_Type (New vs. Renewal).
+
+Users must be able to combine multiple dimensions in a single query (e.g., Quote-to-Bind Ratio by LOB and Territory).
+
+1.3 Query Example:sql
+
+SELECT 
+    p.Product_Category AS Line_of_Business,
+    c.Carrier_Name,
+    cust.State,
+    a.Agency_Name,
+    COUNT(CASE WHEN f.Transaction_Type = 'Submission' THEN 1 END) AS Submission_Count,
+    COUNT(CASE WHEN f.Transaction_Type = 'Quote' THEN 1 END) AS Quote_Count,
+    COUNT(CASE WHEN f.Transaction_Type = 'Bind' THEN 1 END) AS Bind_Count,
+    CAST(COUNT(CASE WHEN f.Transaction_Type = 'Quote' THEN 1 END) AS FLOAT) / NULLIF(COUNT(CASE WHEN f.Transaction_Type = 'Submission' THEN 1 END), 0) AS Submission_to_Quote_Ratio
+FROM Policy_Fact f
+JOIN Product_Dimension p ON f.Product_ID = p.Product_ID
+JOIN Carrier_Dimension c ON f.Carrier_ID = c.Carrier_ID
+JOIN Customer_Dimension cust ON f.Customer_ID = cust.Customer_ID
+JOIN Agent_Dimension a ON f.Agent_ID = a.Agent_ID
+WHERE f.Date_ID BETWEEN '20240101' AND '20241231'
+GROUP BY p.Product_Category, c.Carrier_Name, cust.State, a.Agency_Name
+
+Purpose: Calculate submission, quote, bind counts, and ratios for 2024, grouped by LOB, Carrier, State, and Agency.
+
+1.4 Data Availability:Metrics must be available for Year-to-Date (YTD), Rolling 12 Months (R-12), and Prior Year Comparisons (see Timeframes section for details).
+Data must cover 11 years of historical data to support actuarial analysis.
+
+2. Book AnalysisBusiness Requirement: Enable insights on the existing book by providing in-force counts and aggregated premium, broken down by Line of Business, Carrier, Territory, Agency, and key policy characteristics.Functional Requirements:
+2.1 In-Force Policy Metrics:The system must provide:In-Force Count: Number of active policies (where Policy_Fact.Policy_End_Date >= CURRENT_DATE or is null).
+Aggregated Premium: Sum of Policy_Fact.Premium_Amount for in-force policies.
+
+Metrics must be queryable via T-SQL on the SQL Endpoint.
+
+2.2 Breakdown Dimensions:The system must support filtering and grouping by:Line of Business (Product_Dimension.Product_Category).
+Carrier (Carrier_Dimension.Carrier_Name).
+Territory (Customer_Dimension.State, Customer_Dimension.ZIP_Code).
+Agency (Agent_Dimension.Agency_Name).
+Policy Characteristics:Policy_Fact.Effective_Date
+Policy_Fact.Submission_Date
+.policy_Dimension.Class_Code
+Policy_Dimension.NAICS_Code
+Policy_Dimension.Industry_Type
+
+Users must be able to combine dimensions (e.g., In-Force Count by LOB and ZIP Code).
+
+2.3 Query Example:sql
+
+SELECT 
+    p.Product_Category AS Line_of_Business,
+    c.Carrier_Name,
+    cust.State,
+    a.Agency_Name,
+    COUNT(*) AS In_Force_Count,
+    SUM(f.Premium_Amount) AS Total_Premium
+FROM Policy_Fact f
+JOIN Product_Dimension p ON f.Product_ID = p.Product_ID
+JOIN Carrier_Dimension c ON f.Carrier_ID = c.Carrier_ID
+JOIN Customer_Dimension cust ON f.Customer_ID = cust.Customer_ID
+JOIN Agent_Dimension a ON f.Agent_ID = a.Agent_ID
+WHERE f.Policy_End_Date >= GETDATE() OR f.Policy_End_Date IS NULL
+GROUP BY p.Product_Category, c.Carrier_Name, cust.State, a.Agency_Name
+
+Purpose: Calculate in-force policy counts and total premiums by LOB, Carrier, State, and Agency.
+
+2.4 Data Availability:Metrics must be available for YTD, R-12, and Prior Year Comparisons.
+Data must cover 11 years of historical data.
+
+3. Holistic Customer ViewBusiness Requirement: Roll up policy, premium, and exposure data at the policyholder level, allowing drill-down into each LOB and identification of cross-sell/upsell opportunities.Functional Requirements:
+3.1 Customer-Centric Aggregation:The system must aggregate the following metrics at the Customer_Dimension.Customer_ID level:Total Policies: Count of policies (from Policy_Fact).
+Total Premium: Sum of Policy_Fact.Premium_Amount.
+Exposure Data: Sum of Policy_Fact.Coverage_Amount or other exposure metrics (e.g., insured value, risk units).
+
+Aggregations must be queryable via T-SQL on the SQL Endpoint.
+
+3.2 Drill-Down by LOB:The system must allow drill-down into policy details by Product_Dimension.Product_Category (LOB) for each customer.
+Users must be able to view policy characteristics (e.g., Effective_Date, Class_Code, NAICS_Code) for each LOB.
+
+3.3 Cross-Sell/Upsell Opportunities:The system must provide a mechanism to identify customers with policies in one LOB but not others (e.g., customers with Auto but not Home insurance).
+The system must support a Cross-Sell Score (calculated field) based on customer attributes (e.g., Customer_Dimension.Age, Customer_Segment) and policy history.
+Example logic: Flag customers with Customer_Segment = 'High-Value' and only one LOB as high-priority for cross-sell.
+
+3.4 Query Example:sql
+
+SELECT 
+    c.Customer_ID,
+    c.Name,
+    c.Customer_Segment,
+    COUNT(DISTINCT f.Policy_ID) AS Total_Policies,
+    SUM(f.Premium_Amount) AS Total_Premium,
+    SUM(f.Coverage_Amount) AS Total_Exposure,
+    STRING_AGG(p.Product_Category, ', ') AS LOBs,
+    CASE 
+        WHEN COUNT(DISTINCT p.Product_Category) = 1 AND c.Customer_Segment = 'High-Value' THEN 'High'
+        ELSE 'Low'
+    END AS Cross_Sell_Priority
+FROM Customer_Dimension c
+LEFT JOIN Policy_Fact f ON c.Customer_ID = f.Customer_ID
+JOIN Product_Dimension p ON f.Product_ID = p.Product_ID
+WHERE f.Policy_End_Date >= GETDATE() OR f.Policy_End_Date IS NULL
+GROUP BY c.Customer_ID, c.Name, c.Customer_Segment
+
+Purpose: Aggregate policy, premium, and exposure data by customer, identify LOBs, and flag cross-sell opportunities.
+
+3.5 Data Availability:Metrics must be available for YTD, R-12, and Prior Year Comparisons.
+Data must cover 11 years to support long-term customer analysis.
+
+4. Submission Flow InformationBusiness Requirement: Understand how each policy moves through the submission funnel and track policies in each bucket at any point in time, including historical flow and bucket documentation.Functional Requirements:
+4.1 Submission Funnel Buckets:The system must define and document the following submission funnel buckets in the Policy_Fact.Transaction_Type:Received: Submission received from customer or agent.
+In Review: Submission under review by underwriting.
+Quoted: Quote provided to customer.
+Bound: Policy issued.
+Declined: Submission rejected.
+Cancelled: Policy cancelled after binding.
+
+Documentation of bucket definitions must be maintained in a metadata repository (e.g., Microsoft Purview) and accessible to business users.
+
+4.2 Current and Historical Status:The system must provide the current Transaction_Type for each policy in the Policy_Fact table.
+The system must maintain a historical record of status changes in a new Policy_Status_History table:Columns:Policy_ID (Foreign Key to Policy Dimension)
+Status_Change_Date (Date of status change)
+Previous_Status (e.g., Received, In Review)
+New_Status (e.g., Quoted, Bound)
+Change_Reason (Optional, e.g., "Underwriting Approved")
+
+Users must be able to query the current status and historical status changes via T-SQL.
+
+4.3 Submission Flow Tracking:The system must allow tracking of each policy’s movement through the funnel (e.g., time spent in each status, transitions between statuses).
+The system must calculate Time-in-Status (e.g., days between Received and Quoted) using Policy_Status_History.Status_Change_Date.
+
+4.4 Query Example:sql
+
+SELECT 
+    p.Policy_ID,
+    f.Transaction_Type AS Current_Status,
+    h.Status_Change_Date,
+    h.Previous_Status,
+    h.New_Status,
+    DATEDIFF(DAY, LAG(h.Status_Change_Date) OVER (PARTITION BY p.Policy_ID ORDER BY h.Status_Change_Date), h.Status_Change_Date) AS Days_in_Status
+FROM Policy_Fact f
+JOIN Policy_Dimension p ON f.Policy_ID = p.Policy_ID
+LEFT JOIN Policy_Status_History h ON p.Policy_ID = h.Policy_ID
+WHERE f.Date_ID BETWEEN '20240101' AND '20241231'
+ORDER BY p.Policy_ID, h.Status_Change_Date
+
+Purpose: Track the submission flow for 2024 policies, including current status and time spent in each status.
+
+4.5 Bucket Counts:The system must provide counts of policies in each funnel bucket at a specific point in time (e.g., end of month) or over a time range.
+Example Query:sql
+
+SELECT 
+    f.Transaction_Type AS Funnel_Bucket,
+    COUNT(*) AS Policy_Count
+FROM Policy_Fact f
+WHERE f.Date_ID = '20241231'
+GROUP BY f.Transaction_Type
+
+4.6 Data Availability:Submission flow data must be available for YTD, R-12, and Prior Year Comparisons.
+Historical status data must cover 11 years.
+
+5. TimeframesBusiness Requirement: Provide views for YTD, Rolling 12 Months, Prior Year Comparisons, with monthly granularity and 11 years of data for actuarial needs.Functional Requirements:
+5.1 Time-Based Views:The system must support predefined views for:Year-to-Date (YTD): Data from January 1 of the current year to the current date.
+Rolling 12 Months (R-12): Data from the current date minus 12 months to the current date.
+Prior Year Comparisons: Data for the same period in the prior year (e.g., YTD 2024 vs. YTD 2023).
+
+Views must be accessible via T-SQL using the Date_Dimension (e.g., Date_ID, Year, Month).
+
+5.2 Monthly Granularity:The system must allow grouping and filtering by Date_Dimension.Month for tactical performance management.
+Example Query:sql
+
+SELECT 
+    d.Year,
+    d.Month,
+    COUNT(*) AS In_Force_Count,
+    SUM(f.Premium_Amount) AS Total_Premium
+FROM Policy_Fact f
+JOIN Date_Dimension d ON f.Date_ID = d.Date_ID
+WHERE d.Date BETWEEN '20240101' AND '20241231'
+GROUP BY d.Year, d.Month
+
+5.3 11-Year Data Retention:The system must retain 11 years of data in the Policy_Fact, Claims_Fact, and Policy_Status_History tables to support actuarial analysis.
+Data must be partitioned by Date_Dimension.Year to optimize query performance for historical data.
+Year-over-Year (YOY) comparisons must be supported (e.g., In-Force Count for 2024 vs. 2023).
+
+5.4 Query Example for YOY Comparison:sql
+
+SELECT 
+    d.Year,
+    COUNT(*) AS In_Force_Count,
+    SUM(f.Premium_Amount) AS Total_Premium
+FROM Policy_Fact f
+JOIN Date_Dimension d ON f.Date_ID = d.Date_ID
+WHERE d.Year IN ('2024', '2023')
+    AND d.Date <= '20241231'
+    AND (f.Policy_End_Date >= d.Date OR f.Policy_End_Date IS NULL)
+GROUP BY d.Year
+
+Purpose: Compare in-force counts and premiums for 2023 and 2024.
+
+6. Self-Service & Data AccessBusiness Requirement: Business users must query data autonomously via SQL endpoints, with governance, documentation, and column standardization. Querying large datasets must be performant.Functional Requirements:
+6.1 Self-Service Querying:The system must allow business users to query the SQL Endpoint using T-SQL via:Microsoft Fabric Portal Query Editor
+SQL Server Management Studio (SSMS v19+)
+Azure Data Studio
+Power BI DirectQuery
+
+Queries must support datasets exceeding Excel row limits (1,048,576 rows) with no performance degradation.
+
+6.2 Governance:The system must enforce Role-Based Access Control (RBAC) and Row-Level Security (RLS) to restrict data access based on user roles (e.g., Underwriters can only see their LOB).
+Sensitive columns (e.g., Customer_Dimension.Name, Policy_Fact.Premium_Amount) must support dynamic data masking where applicable.
+Data access must be logged and auditable via Microsoft Purview for compliance.
+
+6.3 Documentation and Standardization:The system must provide a data catalog in Microsoft Purview documenting:Table and column definitions (e.g., Policy_Fact.Premium_Amount as “Total premium amount in USD”).
+Aggregation logic (e.g., how Submission-to-Quote Ratio is calculated).
+Funnel bucket definitions (e.g., Received, Quoted, Bound).
+
+Column names must follow a standardized naming convention (e.g., PascalCase, descriptive names like Customer_ID, Premium_Amount).
+Metadata must include data lineage from source systems to the SQL Endpoint.
+
+6.4 Performance for Large Datasets:The system must optimize query performance for large datasets (up to 1 TB) using:Partitioning by Date_Dimension.Date_ID or Year.
+V-Order for Delta tables to improve read performance.
+OPTIMIZE commands to compact small Parquet files.
+Statistics (automatically maintained or manually updated via UPDATE STATISTICS).
+
+Queries must complete within 2 seconds for datasets up to 1 million rows and 10 seconds for datasets up to 10 million rows (per non-functional requirements).
+
+6.5 Query Example for Self-Service:sql
+
+SELECT 
+    p.Product_Category,
+    COUNT(*) AS Submission_Count
+FROM Policy_Fact f
+JOIN Product_Dimension p ON f.Product_ID = p.Product_ID
+WHERE f.Transaction_Type = 'Submission'
+    AND f.Date_ID BETWEEN '20240101' AND '20241231'
+GROUP BY p.Product_Category
+
+Purpose: Allow a business user to analyze submission counts by LOB for 2024.
+
+Additional ConsiderationsNew Dimension Tables:Carrier_Dimension: Add to store carrier details (e.g., Carrier_ID, Carrier_Name).
+Policy_Status_History: Add to track submission flow transitions.
+
+ETL Requirements:Data pipelines must ingest submission, quote, bind, and status change data into the Policy_Fact and Policy_Status_History tables.
+Use Apache Spark or Fabric Dataflows to transform raw data into the dimensional model.
+
+Integration with Power BI:The SQL Endpoint must support DirectQuery for real-time dashboards (e.g., submission funnel, customer 360).
+Predefined views for YTD, R-12, and YOY comparisons must be exposed as Power BI datasets.
+
+Actuarial Support:Ensure 11-year data retention with optimized partitioning to support long-term actuarial models (e.g., loss reserving, pricing models).
+
