@@ -1,0 +1,30 @@
+The following criteria must be met to consider the ADF pipeline complete and functional:Functional Requirements:AC1: The pipeline accepts a parameter (DatabaseNames) containing a comma-separated, single-quoted list of database names (e.g., 'demo','demo1' or 'demo').
+AC2: The Lookup activity executes the provided SQL query, correctly passing the DatabaseNames parameter to the dynamic SQL, and retrieves restoredCompleted (boolean) from msdb.dbo.restorehistory and sys.databases.
+AC3: The Until activity loops until restoredCompleted = true or a timeout/max iterations (e.g., 100 iterations or 1 hour) is reached.
+AC4: The Wait activity inside Until applies a configurable delay (e.g., via parameter WaitSeconds) between iterations.
+AC5: The pipeline sets a boolean variable RestoreStatus to match the final restoredCompleted value from the Lookup activity (true if all databases have restore history on the current date and are ONLINE; false otherwise).
+AC6: The RestoreStatus variable is accessible to the caller (e.g., parent pipeline) via the pipeline’s output (e.g., @activity('PipelineName').output.variables.RestoreStatus).
+
+Correctness:AC7: For a given DatabaseNames list, restoredCompleted = true only when:All specified databases have at least one restore history entry in msdb.dbo.restorehistory for the current date (YYYY-MM-DD).
+All specified databases are in sys.databases with state = 1 (ONLINE).
+
+AC8: If any database lacks a restore history entry for the current date or is not ONLINE, restoredCompleted = false and RestoreStatus = false.
+AC9: The pipeline handles a single database or multiple databases (1 or more) correctly.
+
+Error Handling:AC10: If the Lookup activity fails (e.g., SQL connection error, invalid query), the pipeline logs the error in the output and sets RestoreStatus = false.
+AC11: If the Until activity reaches timeout/max iterations, the pipeline exits gracefully, setting RestoreStatus = false.
+
+Performance and Reliability:AC12: The SQL query executes within 5 seconds for a typical dataset (e.g., <100 restore history rows per database).
+AC13: The pipeline completes within a configurable timeout (e.g., 1 hour) or max iterations (e.g., 100), preventing infinite loops.
+AC14: The pipeline handles invalid DatabaseNames input (e.g., empty string or malformed list) by failing gracefully with a logged error and RestoreStatus = false.
+
+Usability and Maintainability:AC15: Pipeline parameters (DatabaseNames, WaitSeconds, etc.) and the RestoreStatus variable are clearly named and documented in the pipeline (e.g., via annotations or external doc).
+AC16: The pipeline’s JSON is exportable for deployment to higher environments (e.g., via Git or ADF export).
+
+Testing:AC17: The pipeline passes tests for:All databases restored and ONLINE (RestoreStatus = true).
+Some databases not restored or not ONLINE (RestoreStatus = false).
+No restore history for any database (RestoreStatus = false).
+Single database in DatabaseNames (RestoreStatus reflects correct state).
+
+AC18: The RestoreStatus variable is verified as accessible in a parent pipeline or ADF output during testing.
+
