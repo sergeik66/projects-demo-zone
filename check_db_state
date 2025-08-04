@@ -1,3 +1,17 @@
+@{
+  'SELECT 
+      CASE 
+          WHEN COUNT(DISTINCT rh.destination_database_name) = (SELECT COUNT(*) FROM STRING_SPLIT(\'' + pipeline().parameters.DatabaseNames + '\', \',\'))
+          AND SUM(CASE WHEN d.state = 1 THEN 1 ELSE 0 END) = (SELECT COUNT(*) FROM STRING_SPLIT(\'' + pipeline().parameters.DatabaseNames + '\', \',\'))
+          THEN CAST(1 AS BIT)
+          ELSE CAST(0 AS BIT)
+      END AS restoredCompleted
+  FROM msdb.dbo.restorehistory rh
+  INNER JOIN sys.databases d ON rh.destination_database_name = d.name
+  WHERE rh.destination_database_name IN (SELECT value FROM STRING_SPLIT(\'' + pipeline().parameters.DatabaseNames + '\', \',\'))
+  AND CAST(rh.restore_date AS DATE) = CAST(\'' + pipeline().parameters.CurrentDate + '\' AS DATE)'
+}
+
 --DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
 DECLARE @DatabaseNames NVARCHAR(MAX) = '''AdventureWorks2019'''; -- Replace with dynamic list, e.g., '''demo'', ''demo1'', ''demo2'''
 
