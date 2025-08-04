@@ -1,0 +1,20 @@
+--DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
+DECLARE @DatabaseNames NVARCHAR(MAX) = '''AdventureWorks2019'''; -- Replace with dynamic list, e.g., '''demo'', ''demo1'', ''demo2'''
+
+DECLARE @CurrentDate DATE = CAST('2025-03-04 14:09:41.200' AS DATE);
+DECLARE @DatabaseNames NVARCHAR(MAX) = '''AdventureWorks2019''';
+DECLARE @SQL NVARCHAR(MAX) = '
+SELECT 
+    CASE 
+        WHEN COUNT(DISTINCT rh.destination_database_name) = (SELECT COUNT(*) FROM STRING_SPLIT(' + QUOTENAME(@DatabaseNames, '''') + ', '',''))
+        AND SUM(CASE WHEN d.state = 0 THEN 1 ELSE 0 END) = (SELECT COUNT(*) FROM STRING_SPLIT(' + QUOTENAME(@DatabaseNames, '''') + ', '',''))
+        THEN CAST(0 AS BIT)
+        ELSE CAST(1 AS BIT)
+    END AS restoredCompleted
+FROM msdb.dbo.restorehistory rh
+INNER JOIN sys.databases d ON rh.destination_database_name = d.name
+WHERE rh.destination_database_name IN (SELECT value FROM STRING_SPLIT(' + QUOTENAME(@DatabaseNames, '''') + ', '',''))
+AND CAST(rh.restore_date AS DATE) = @CurrentDate;
+';
+
+EXEC sp_executesql @SQL, N'@CurrentDate DATE', @CurrentDate;
