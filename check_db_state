@@ -1,3 +1,4 @@
+SELECT CASE WHEN COUNT(DISTINCT rh.destination_database_name) = (SELECT COUNT(*) FROM STRING_SPLIT('GIGINSDATA,PROSPECTHOLDINGARCHIVE', ',')) AND SUM(CASE WHEN d.state = 1 THEN 1 ELSE 0 END) = (SELECT COUNT(*) FROM STRING_SPLIT('GIGINSDATA,PROSPECTHOLDINGARCHIVE', ',')) THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS restoredCompleted FROM msdb.dbo.restorehistory rh INNER JOIN sys.databases d ON rh.destination_database_name = d.name WHERE rh.destination_database_name IN (SELECT value FROM STRING_SPLIT('GIGINSDATA,PROSPECTHOLDINGARCHIVE', ',')) AND CAST(rh.restore_date AS DATE) = CAST('2025-08-04' AS DATE)"
 @{
   'SELECT 
       CASE 
