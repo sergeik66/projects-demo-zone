@@ -107,3 +107,108 @@ for item in contents:
     source_config_folder_name = f"{datasets_path}/{item['folderName']}/"
     source_config_file_name = f"{item['fileName']}"
     generate_watermark(source_config_folder_name, source_config_file_name)
+
+
+# updated
+def generate_watermark(source_config_folder_name, source_config_file_name):
+    input_path = source_config_folder_name + source_config_file_name
+    watermarkPath = f"{source_config_folder_name}watermark/{source_config_file_name}"
+    onelake_fs = fsspec.filesystem("abfss", **storage_options)
+    dataset = json.load(onelake_fs.open(input_path, "r"))
+    sourceSystemProperties = dataset["sourceSystemProperties"]
+    curatedProperties = dataset.get("curatedProperties", {})
+    
+    # set initial values
+    query = ''
+    columnsList = "*"
+    whereClause = ''
+    watermarkValue = ''
+    sourceWatermarkIdentifier = ''
+    jsonWatermarkQuery = ''
+    
+    if dataset["datasetTypeName"] in ["database","file"]:
+        # build column list
+        columnsList = ",".join(sourceSystemProperties.get("includeSpecificColumns", ["*"]))
+        
+        if sourceSystemProperties["ingestType"] == "watermark":
+            # add watermark column to select list
+            sourceWatermarkIdentifier = sourceSystemProperties["sourceWatermarkIdentifier"]
+            columnsList += f",{sourceWatermarkIdentifier} as dl_watermark"
+
+            # set watermark value using existing value if available
+            watermarkValue = '1900-01-01T00:00:00Z'
+            if onelake_fs.exists(watermarkPath):
+                existingWatermarkJson = json.load(onelake_fs.open(watermarkPath, "r", encoding="utf-8-sig"))
+                if existingWatermarkJson["sourceWatermarkIdentifier"] == sourceWatermarkIdentifier and existingWatermarkJson["watermarkValue"]:
+                    watermarkValue = existingWatermarkJson["watermarkValue"]
+            # build where clause
+            whereClause = f"WHERE {sourceWatermarkIdentifier} > CAST('{watermarkValue}' AS datetime2)"
+        
+        elif sourceSystemProperties["ingestType"] == "cdc":
+            # For CDC, use primary key list and last processed LSN
+            primaryKeyList = curatedProperties.get("primaryKeyList", [])
+            if not primaryKeyList:
+                raise ValueError("Primary key list is required for CDC ingest type")
+            
+            # Add CDC-specific columns
+            cdc_columns = ["__$operation", "__$start_lsn", "__$seqval", "__$update_mask"]
+            columnsList = f"{columnsList},{','.join(cdc_columns)}" if columnsList != "*" else ",".join(cdc_columns)
+            
+            # Set watermark based on last processed LSN
+            watermarkValue = '0x0'  # Default LSN value
+            sourceWatermarkIdentifier = "__$start_lsn"
+            
+            if onelake_fs.exists(watermarkPath):
+                existingWatermarkJson = json.load(onelake_fs.open(watermarkPath, "r", encoding="utf-8-sig"))
+                if existingWatermarkJson.get("sourceWatermarkIdentifier") == sourceWatermarkIdentifier and existingWatermarkJson.get("watermarkValue"):
+                    watermarkValue = existingWatermarkJson["watermarkValue"]
+            
+            # Build CTE for net changes
+            partition_keys = ",".join(primaryKeyList)
+            table_name = f"[cdc].[{dataset.get('datasetSchema', 'dbo')}_{dataset['datasetName']}_CT]"
+            
+            cte_query = f"""
+            WITH LatestChanges AS (
+                SELECT 
+                    {columnsList},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY {partition_keys}
+                        ORDER BY [__$seqval] DESC
+                    ) AS rn
+                FROM {table_name}
+                WHERE [__$operation] IN (1, 2, 4) AND __$start_lsn > {watermarkValue}
+            )
+            SELECT 
+                {columnsList}
+            FROM LatestChanges
+            WHERE rn = 1
+            """
+            query = cte_query
+            
+        filterExpression = sourceSystemProperties.get('filterExpression')
+        if sourceSystemProperties.get("isDynamicQuery") and filterExpression:
+            filterExpression = filterExpression.strip().lower()
+            if filterExpression[0:6] == "where ":
+                filterExpression = filterExpression.replace("where", "", 1).lstrip()
+            elif filterExpression[0:4] == "and ":
+                filterExpression = filterExpression.replace("and", "", 1).lstrip()
+            if not whereClause:
+                whereClause = "where " + filterExpression
+            else:
+                whereClause = f"{whereClause} and {filterExpression}"
+            if sourceSystemProperties["ingestType"] == "cdc":
+                # Append filter to the outer query of the CTE
+                query = f"{cte_query} AND {filterExpression}"
+            else:
+                query = f"SELECT {columnsList} FROM {dataset.get('datasetSchema', 'dbo')}.{dataset['datasetName']} {whereClause}"
+        
+        # build json for watermark file
+        jsonWatermarkQuery = {
+            "query": query,
+            "sourceWatermarkIdentifier": sourceWatermarkIdentifier,
+            "watermarkValue": watermarkValue
+        }
+        
+        # write json to lakehouse
+        with onelake_fs.open(watermarkPath, "w") as json_file:
+            json.dump(jsonWatermarkQuery, json_file, indent=4)
