@@ -1,0 +1,72 @@
+{
+    "datasetName": "wcpayrol",
+    "enable": true,
+    "datasetTypeName": "database",
+    "databaseName": "GIGEOMDATA",
+    "datasetSchema": "dbo",
+    "sourceSystemProperties": {
+        "sourceSystemName": "demo_sqldb",
+        "includeSpecificColumns": [
+            "code",
+            "primeseq",
+            "state",
+            "effdate",
+            "classcode",
+            "seqcode",
+            "territory",
+            "exmod",
+            "minprem",
+            "exposure",
+            "premium",
+            "rate",
+            "xcluamt",
+            "losscons",
+            "form",
+            "paragraph",
+            "volcomp",
+            "hazard",
+            "cvrg",
+            "disctype",
+            "classuffix",
+            "diffprem",
+            "diffrate",
+            "rateeffdate",
+            "losscost"
+        ],
+        "ingestType": "cdc",
+        "isDynamicQuery": true
+    },
+    "rawProperties": {
+        "lakehouseName": "den_lhw_pdi_001_raw",
+        "fileType": "parquet",
+        "directoryName": "demo_sqldb"
+    },
+    "curatedProperties": {
+        "lakehouseName": "den_lhw_pdi_001_curated",
+        "schemaName": "demo",
+        "fileOptions": {
+            "encoding": "ISO-8859-1",
+            "header": true,
+            "inferColumnTypes": true,
+            "multiline": true,
+            "delimiter": ",",
+            "escape": "\"",
+            "timestampFormat": "dd/MM/yyyy"
+        },
+        "columnList": ["*"],
+        "primaryKeyList": [
+            "code",
+            "primeseq",
+            "state",
+            "effdate",
+            "classcode",
+            "seqcode",
+            "territory",
+            "rateeffdate",
+            "volcomp"
+        ],
+        "duplicateCheckEnabled": false,
+        "targetFileFormat": "delta",
+        "targetLoadType": "merge"
+    }
+}
