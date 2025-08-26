@@ -54,3 +54,9 @@ def ingest(self, source_data: DataFrame):
                 .whenNotMatchedInsertAll()
                 .execute()
             )
+
+ParseException: 
+[PARSE_SYNTAX_ERROR] Syntax error at or near '$'.(line 1, pos 5)
+
+== SQL ==
+sd.__$operation
