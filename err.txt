@@ -1,16 +1,56 @@
-# Load version 9 and version 10 of the Delta table
-df_version_10 = spark.read.format("delta").option("versionAsOf", 10).load("path/to/delta_table")
-df_version_9 = spark.read.format("delta").option("versionAsOf", 9).load("path/to/delta_table")
+def ingest(self, source_data: DataFrame):
+        base_data = DeltaTable.forPath(spark, self.table_path)
+        merge_predicate = self._create_merge_predicate(self._candidate_keys)
+        upd_col = self._get_upd_col(df=source_data, exclusions=["dl_createddateutc"])
 
-# Identify updated records by joining on a key column (e.g., 'id')
-# Replace 'id' with your actual key column and 'some_column' with columns to check for updates
-updated_records = df_version_10.join(df_version_9, "id", "inner") \
-    .where(
-        # Check if any non-key column differs (adjust based on your schema)
-        (df_version_10.some_column != df_version_9.some_column) |
-        (df_version_10.some_column.isNull() != df_version_9.some_column.isNull())
-    ) \
-    .select(df_version_10["*"])  # Select all columns from version 10 (updated records)
+        # Check if source data contains CDC columns
+        is_cdc = "__$operation" in source_data.columns
 
-# Show the updated records
-updated_records.show(truncate=False)
+        if is_cdc:
+            # Handle CDC: inserts (__$operation = 2), updates (__$operation = 4), deletes (__$operation = 1)
+            cdc_exclusions = [
+                "dl_createddateutc",
+                "__$start_lsn",
+                "__$end_lsn",
+                "__$seqval",
+                "__$operation",
+                "__$update_mask",
+                "row_num"
+            ]
+            upd_col_cdc = self._get_upd_col(df=source_data, exclusions=cdc_exclusions)
+            (
+                base_data.alias("bd").merge(
+                    source=source_data.alias("sd"),
+                    condition=merge_predicate
+                )
+                .withSchemaEvolution()
+                .whenMatchedUpdate(
+                    condition="sd.__$operation IN (2, 4) AND bd.dl_rowhash <> sd.dl_rowhash",
+                    set=upd_col_cdc
+                )
+                .whenMatchedUpdate(
+                    condition="sd.__$operation = 1",
+                    set={
+                        "dl_is_deleted": lit(1),
+                        "dl_iscurrent": lit(0),
+                        "dl_lastmodifiedutc": lit(self.batch_time)
+                    }
+                )
+                .whenNotMatchedInsert(
+                    condition="sd.__$operation IN (2, 4)",
+                    values=upd_col_cdc
+                )
+                .execute()
+            )
+        else:
+            # Non-CDC merge
+            (
+                base_data.alias("bd").merge(
+                    source=source_data.alias("sd"),
+                    condition=merge_predicate
+                )
+                .withSchemaEvolution()
+                .whenMatchedUpdate(condition="bd.dl_rowhash <> sd.dl_rowhash", set=upd_col)
+                .whenNotMatchedInsertAll()
+                .execute()
+            )
