@@ -78,3 +78,5 @@ def ingest(self, source_data: DataFrame):
                     values=upd_col_cdc
                 )
                 .execute()
+
+AnalysisException: [DELTA_MERGE_UNRESOLVED_EXPRESSION] Cannot resolve dl_is_deleted in UPDATE clause given columns sd.code, sd.primeseq, sd.state, sd.effdate, sd.classcode, sd.seqcode, sd.territory, sd.exmod, sd.minprem, sd.exposure, sd.premium, sd.rate, sd.xcluamt, sd.losscons, sd.form, sd.paragraph, sd.volcomp, sd.hazard, sd.cvrg, sd.disctype, sd.classuffix, sd.diffprem, sd.diffrate, sd.rateeffdate, sd.losscost, sd.__operation, sd.__start_lsn, sd.__seqval, sd.dl_rowhash, sd.dl_partitionkey, sd.dl_iscurrent, sd.dl_recordstartdateutc, sd.dl_recordenddateutc, sd.dl_createddateutc, sd.dl_lastmodifiedutc, sd.dl_sourcefilepath, sd.dl_sourcefilename, sd.dl_eltid, sd.dl_runid
