@@ -1,15 +1,16 @@
-from spark_engine.common.email_util import get_secret_notebookutils
-import pgpy
-private_key_str = get_secret_notebookutils("mock-private-key-secret", "my-key-vault")
-passphrase = get_secret_notebookutils("mock-passphrase-secret", "my-key-vault")
-privkey, _ = pgpy.PGPKey.from_blob(private_key_str)
-input_file = "abfss://ab08da5e-0f71-423b-a811-bd0af21f182b@onelake.dfs.fabric.microsoft.com/f1da4f29-81af-4030-9190-889e5fa725bf/Files/user_data/pdos_webreport/encrypted/BOP PD & OS.xlsx.pgp"
-fs = fsspec.filesystem("abfss", account_name="onelake", account_host="onelake.dfs.fabric.microsoft.com", client_id=os.getenv("AZURE_CLIENT_ID"), client_secret=os.getenv("AZURE_CLIENT_SECRET"), tenant_id=os.getenv("AZURE_TENANT_ID"))
-with fs.open(input_file, "rb") as rb_file:
-    enc_message = pgpy.PGPMessage.from_blob(rb_file.read())
-try:
-    with privkey.unlock(passphrase):
-        decrypted_message = privkey.decrypt(enc_message).message
-        print("Decryption successful")
-except pgpy.errors.PGPError as e:
-    print(f"Decryption failed: {str(e)}")
+# Load version 9 and version 10 of the Delta table
+df_version_10 = spark.read.format("delta").option("versionAsOf", 10).load("path/to/delta_table")
+df_version_9 = spark.read.format("delta").option("versionAsOf", 9).load("path/to/delta_table")
+
+# Identify updated records by joining on a key column (e.g., 'id')
+# Replace 'id' with your actual key column and 'some_column' with columns to check for updates
+updated_records = df_version_10.join(df_version_9, "id", "inner") \
+    .where(
+        # Check if any non-key column differs (adjust based on your schema)
+        (df_version_10.some_column != df_version_9.some_column) |
+        (df_version_10.some_column.isNull() != df_version_9.some_column.isNull())
+    ) \
+    .select(df_version_10["*"])  # Select all columns from version 10 (updated records)
+
+# Show the updated records
+updated_records.show(truncate=False)
