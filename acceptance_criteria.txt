@@ -28,3 +28,22 @@ Single database in DatabaseNames (RestoreStatus reflects correct state).
 
 AC18: The RestoreStatus variable is verified as accessible in a parent pipeline or ADF output during testing.
 
+Functional Requirements
+
+CDC Processing:
+
+The pipeline must correctly process CDC data from a Parquet file with __$operation values:
+
+Inserts (__$operation = 2): Add new records to the target Delta table with dl_is_deleted = 0, dl_iscurrent = 1, and exclude CDC columns (__$operation, __start_lsn, __seqval).
+Updates (__$operation = 4): Update existing records where dl_rowhash differs, updating dl_lastmodifiedutc and preserving dl_is_deleted = 0, dl_iscurrent = 1.
+Deletes (__$operation = 1): Update existing records to set dl_is_deleted = 1, dl_iscurrent = 0, and update dl_lastmodifiedutc.
+
+
+The merge operation must use the primaryKeyList (e.g., ["code", "primeseq", "effdate"]) for matching source and target records.
+
+
+Watermark Updates:
+
+When isDynamicQuery: true and ingestType: "cdc", generate a watermark JSON file with the maximum __start_lsn (or sourceWatermarkIdentifier) and a valid SQL query for the next incremental load.
+Handle cases where __start_lsn is missing by using a fallback column (e.g., effdate).
+
