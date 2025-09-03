@@ -311,6 +311,7 @@ logger.info("Notebook execution completed")
 # Import necessary modules
 from pyspark.sql import SparkSession
 import logging
+import re
 
 # Configuration
 lakehouse_name = "my_lakehouse"
@@ -333,40 +334,54 @@ except Exception as e:
     logger.error(f"Error reading file: {str(e)}")
     raise
 
-# Step 2: Ensure schema exists in the lakehouse
+# Step 2: Extract table names from DDL
 try:
-    logger.info(f"Ensuring schema {schema_name} exists in lakehouse {lakehouse_name}")
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {lakehouse_name}.{schema_name}")
-    logger.info(f"Schema {schema_name} ready")
+    logger.info("Extracting table names from DDL")
+    # Regular expression to match CREATE TABLE statements and extract table names
+    table_pattern = r"CREATE TABLE IF NOT EXISTS\s+[`']?(\w+)[`']?\s*\("
+    table_names = re.findall(table_pattern, ddl_text, re.IGNORECASE)
+    if not table_names:
+        logger.error("No table names found in DDL")
+        raise ValueError("No valid CREATE TABLE statements found in DDL")
+    logger.info(f"Extracted table names: {table_names}")
 except Exception as e:
-    logger.error(f"Error creating schema {schema_name}: {str(e)}")
+    logger.error(f"Error extracting table names: {str(e)}")
     raise
 
-# Step 3: Parse the DDL statements (assuming statements are separated by ';')
+# Step 3: Ensure schema exists
+try:
+    logger.info(f"Ensuring schema {schema_name} exists")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+    logger.info(f"Schema {schema_name} ready")
+    # Set the schema as the current context
+    spark.sql(f"USE {schema_name}")
+    logger.info(f"Schema {schema_name} set as current context")
+except Exception as e:
+    logger.error(f"Error creating or setting schema {schema_name}: {str(e)}")
+    raise
+
+# Step 4: Parse the DDL statements (assuming statements are separated by ';')
 ddl_statements = [stmt.strip() + ';' for stmt in ddl_text.split(';') if stmt.strip()]
 
-# Step 4: Execute each DDL statement in the context of the lakehouse and schema
+# Step 5: Execute each DDL statement in the context of the schema
 for i, stmt in enumerate(ddl_statements):
     try:
-        # Replace CREATE TABLE with fully qualified table name
-        modified_stmt = stmt.replace("CREATE TABLE IF NOT EXISTS `", f"CREATE TABLE IF NOT EXISTS `{lakehouse_name}.{schema_name}.")
+        # Replace CREATE TABLE with schema-qualified table name
+        modified_stmt = stmt.replace("CREATE TABLE IF NOT EXISTS `", f"CREATE TABLE IF NOT EXISTS `{schema_name}.")
         logger.info(f"Executing DDL statement {i+1}: {modified_stmt[:100]}...")
         spark.sql(modified_stmt)
         logger.info(f"DDL statement {i+1} executed successfully")
     except Exception as e:
         logger.error(f"Error executing DDL statement {i+1}: {str(e)}")
-        # Continue to try all statements
         continue
 
-# Step 5: Validation - Check if tables exist in the specified lakehouse and schema
-tables_to_validate = ['dim_lob', 'dim_carrier', 'dim_insured_legal_entity_type']
-
-for table in tables_to_validate:
+# Step 6: Validation - Check if extracted tables exist in the specified schema
+for table in table_names:
     try:
-        logger.info(f"Validating table: {lakehouse_name}.{schema_name}.{table}")
-        spark.sql(f"DESCRIBE {lakehouse_name}.{schema_name}.{table}").show()
-        logger.info(f"Table {lakehouse_name}.{schema_name}.{table} exists and is valid")
+        logger.info(f"Validating table: {schema_name}.{table}")
+        spark.sql(f"DESCRIBE {schema_name}.{table}").show()
+        logger.info(f"Table {schema_name}.{table} exists and is valid")
     except Exception as e:
-        logger.error(f"Validation failed for table {lakehouse_name}.{schema_name}.{table}: {str(e)}")
+        logger.error(f"Validation failed for table {schema_name}.{table}: {str(e)}")
 
 logger.info("Notebook execution completed")
