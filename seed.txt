@@ -1,0 +1,200 @@
+DECLARE @StartDate  date = '20100101';
+
+DECLARE @CutoffDate date = DATEADD(DAY, -1, DATEADD(YEAR, 30, @StartDate));
+
+;WITH seq(n) AS 
+(
+  SELECT 0 UNION ALL SELECT n + 1 FROM seq
+  WHERE n < DATEDIFF(DAY, @StartDate, @CutoffDate)
+),
+d(d) AS 
+(
+  SELECT DATEADD(DAY, n, @StartDate) FROM seq
+),
+src AS
+(
+  SELECT
+    TheDate         = CONVERT(date, d),
+    TheDay          = DATEPART(DAY,       d),
+    TheDayName      = DATENAME(WEEKDAY,   d),
+    TheWeek         = DATEPART(WEEK,      d),
+    TheISOWeek      = DATEPART(ISO_WEEK,  d),
+    TheDayOfWeek    = DATEPART(WEEKDAY,   d),
+    TheMonth        = DATEPART(MONTH,     d),
+    TheMonthName    = DATENAME(MONTH,     d),
+    TheQuarter      = DATEPART(Quarter,   d),
+    TheYear         = DATEPART(YEAR,      d),
+    TheFirstOfMonth = DATEFROMPARTS(YEAR(d), MONTH(d), 1),
+    TheLastOfYear   = DATEFROMPARTS(YEAR(d), 12, 31),
+    TheDayOfYear    = DATEPART(DAYOFYEAR, d)
+  FROM d
+),
+dim AS
+(
+  SELECT
+    TheDate, 
+    TheDay,
+    TheDaySuffix        = CONVERT(char(2), CASE WHEN TheDay / 10 = 1 THEN 'th' ELSE 
+                            CASE RIGHT(TheDay, 1) WHEN '1' THEN 'st' WHEN '2' THEN 'nd' 
+                            WHEN '3' THEN 'rd' ELSE 'th' END END),
+    TheDayName,
+    TheDayOfWeek,
+    TheDayOfWeekInMonth = CONVERT(tinyint, ROW_NUMBER() OVER 
+                            (PARTITION BY TheFirstOfMonth, TheDayOfWeek ORDER BY TheDate)),
+    TheDayOfYear,
+    IsWeekend           = CASE WHEN TheDayOfWeek IN (CASE @@DATEFIRST WHEN 1 THEN 6 WHEN 7 THEN 1 END,7) 
+                            THEN 1 ELSE 0 END,
+    TheWeek,
+    TheISOweek,
+    TheFirstOfWeek      = DATEADD(DAY, 1 - TheDayOfWeek, TheDate),
+    TheLastOfWeek       = DATEADD(DAY, 6, DATEADD(DAY, 1 - TheDayOfWeek, TheDate)),
+    TheWeekOfMonth      = CONVERT(tinyint, DENSE_RANK() OVER 
+                            (PARTITION BY TheYear, TheMonth ORDER BY TheWeek)),
+    TheMonth,
+    TheMonthName,
+    TheFirstOfMonth,
+    TheLastOfMonth      = MAX(TheDate) OVER (PARTITION BY TheYear, TheMonth),
+    TheFirstOfNextMonth = DATEADD(MONTH, 1, TheFirstOfMonth),
+    TheLastOfNextMonth  = DATEADD(DAY, -1, DATEADD(MONTH, 2, TheFirstOfMonth)),
+    TheQuarter,
+	TheYearQuarter = CONVERT(nvarchar, TheYear) + '-Q' + CONVERT(nvarchar, TheQuarter),
+    TheFirstOfQuarter   = MIN(TheDate) OVER (PARTITION BY TheYear, TheQuarter),
+    TheLastOfQuarter    = MAX(TheDate) OVER (PARTITION BY TheYear, TheQuarter),
+    TheYear,
+    TheISOYear          = TheYear - CASE WHEN TheMonth = 1 AND TheISOWeek > 51 THEN 1 
+                            WHEN TheMonth = 12 AND TheISOWeek = 1  THEN -1 ELSE 0 END,      
+    TheFirstOfYear      = DATEFROMPARTS(TheYear, 1,  1),
+    TheLastOfYear,
+    IsLeapYear          = CONVERT(bit, CASE WHEN (TheYear % 400 = 0) 
+                            OR (TheYear % 4 = 0 AND TheYear % 100 <> 0) 
+                            THEN 1 ELSE 0 END),
+    Has53Weeks          = CASE WHEN DATEPART(WEEK,     TheLastOfYear) = 53 THEN 1 ELSE 0 END,
+    Has53ISOWeeks       = CASE WHEN DATEPART(ISO_WEEK, TheLastOfYear) = 53 THEN 1 ELSE 0 END,
+    MMYYYY              = CONVERT(char(2), CONVERT(char(8), TheDate, 101))
+                          + CONVERT(char(4), TheYear),
+    Style101            = CONVERT(char(10), TheDate, 101),
+    Style103            = CONVERT(char(10), TheDate, 103),
+    Style112            = CONVERT(char(8),  TheDate, 112),
+    Style120            = CONVERT(char(10), TheDate, 120),
+	YeartoDate			= Case when (YEAR(Cast(GETDATE() as date)) = YEAR(TheDate)) AND (TheDate < Cast(GETDATE() as date)) THEN 1 ELSE 0 END,
+	PriorYeartoDate	    = Case when (YEAR(DATEADD(year, -1, Cast(GETDATE() as date))) = YEAR(TheDate)) AND (TheDate < DATEADD(year, -1, Cast(GETDATE() as date))) THEN 1 ELSE 0 END,
+	PriorYear			= Case when (YEAR(DATEADD(year, -1, Cast(GETDATE() as date))) = YEAR(TheDate)) THEN 1 ELSE 0 END,
+	Prior2Years			= Case when (YEAR(DATEADD(year, -2, Cast(GETDATE() as date))) = YEAR(TheDate)) THEN 1 ELSE 0 END,
+	Trailing12Months	= Case when TheDate > (DATEADD(month, -12, cast(getdate() as date))) AND (TheDate <= cast(getdate() as date)) THEN 1 ELSE 0 END,
+    PriorMonthYTD		= Case when (YEAR(EOMONTH(dateadd(month, -1, cast(getdate() as date)))) = YEAR(TheDate)) AND (TheDate <= EOMONTH(dateadd(month, -1, cast(getdate() as date)))) THEN 1 ELSE 0 END,
+	PriorMonthPYTD		= Case when (YEAR(DATEADD(year, -1, EOMONTH(dateadd(month, -1, cast(getdate() as date))))) = YEAR(TheDate)) AND (TheDate <= EOMONTH(DATEADD(year, -1, DATEADD(month, -1, CAST(GETDATE() AS date))))) THEN 1 ELSE 0 END,
+	PriorMonthTTM		= Case when TheDate > EOMONTH(DATEADD(month, -12, dateadd(month, -1, cast(getdate() as date)))) AND (TheDate <= EOMONTH(dateadd(month, -1, cast(getdate() as date)))) THEN 1 ELSE 0 END,
+    InforceDateYTD      = Case when TheDate=cast (dateadd(s,-1,datetimefromparts(year(getdate()),month(getdate()),1,0,0,0,0)) as date) then 1 else 0 end,
+	InforceDatePYTD     = Case when TheDate=cast (dateadd(s,-1,datetimefromparts(year(getdate())-1,month(getdate()),1,0,0,0,0)) as date) then 1 else 0 end,
+	PriorMonthPYTTM     = Case when TheDate > EOMONTH((DATEADD(month, -24, dateadd(month, -1, cast(getdate() as date))))) AND (TheDate <= EOMONTH((DATEADD(month, -12, dateadd(month, -1, cast(getdate() as date)))))) THEN 1 ELSE 0 END,
+	CurrentQuarter		= case when TheQuarter  = DATEPART(Quarter,   GetDate()) and TheYear = DATEPART(Year,   GetDate()) then 1 else 0 end,
+	PriorYearQuarter     = case when TheDate >= DATEADD(QUARTER, DATEDIFF(QUARTER, 0, DATEADD(YEAR, -1, GETDATE())), 0) AND TheDate < DATEADD(QUARTER, DATEDIFF(QUARTER, 0, DATEADD(YEAR, -1, GETDATE())) + 1, 0) then 1 else 0 end,
+	PriorTrailing4Quarter = case when TheDate >= DATEADD(QUARTER, DATEDIFF(QUARTER, 0, DATEADD(YEAR, -1, GETDATE())), 0) AND TheDate < DATEADD(QUARTER, DATEDIFF(QUARTER, 0, GETDATE()) , 0) then 1 else 0 end
+  FROM src
+)
+
+
+Select cast(Style112 as int) as datekey,
+    TheDate as [date], 
+    TheDay as [day],
+    TheDaySuffix day_suffix ,      
+    TheDayName day_name,
+    TheDayOfWeek day_of_week,
+    TheDayOfWeekInMonth  day_of_week_in_month,
+    TheDayOfYear   day_of_year,
+    IsWeekend         is_weekened ,
+    TheWeek			[week],
+    TheISOweek     [iso_week],
+    TheFirstOfWeek  [first_of_week]    ,
+    TheLastOfWeek   [last_of_week]   ,
+    TheWeekOfMonth  [week_of_month]   ,
+    TheMonth   [month],
+    TheMonthName [month_name],
+    TheFirstOfMonth   [first_of_month],
+    TheLastOfMonth    [last_of_month]  ,
+    TheFirstOfNextMonth  [first_of_next_month] ,
+    TheLastOfNextMonth  [last_of_next_month],
+    TheQuarter  [quarter],
+	TheYearQuarter   [year_quarter] ,
+    TheFirstOfQuarter [first_of_quarter]  ,
+    TheLastOfQuarter   [last_of_quarter] ,
+    TheYear   [year],
+    TheISOYear    [iso_year]     ,      
+    TheFirstOfYear    [first_of_year]  ,
+    TheLastOfYear    [last_of_year],
+    IsLeapYear         [is_leap_year],
+    Has53Weeks        [has_53_weeks] ,
+    Has53ISOWeeks     [has_53_iso_weeks],
+    MMYYYY            mmyyyy  ,
+    style101            ,
+    style103            ,
+    style112            ,
+    style120            ,
+	YeartoDate		year_to_date	,
+	PriorYeartoDate	 prior_year_to_date  ,
+	PriorYear		prior_year,
+	Prior2Years	    prior_2_years		,
+	Trailing12Months  trailing_12_months	,
+    PriorMonthYTD	prior_month_ytd	,
+	PriorMonthPYTD	prior_month_pytd	,
+	PriorMonthTTM	prior_month_ttm	,
+    InforceDateYTD   inforce_date_ytd ,
+	InforceDatePYTD  inforce_date_pytd ,
+	PriorMonthPYTTM   prior_month_py_ttm ,
+	CurrentQuarter	current_quarter	,
+	PriorYearQuarter    prior_year_quarter
+FROM dim
+ORDER BY TheDate
+++++++++++++++++++++++++++++++
+
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LW0',		'Re-write', 'Re-write', Null);
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LX0',		'Re-issue', 'Re-issue', NULL);
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN0',		'NB - New Submission', 'NB - New Submission', NULL);
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR0',		'RN - Renewal', 'RN - Renewal', NULL);
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LZ0',		'Other - Exception', 'Other - Exception', NULL);
+
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1',		'NB - Completed Submission',		'NB - Completed Submission',		'NB - New Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN2',		'NB - Open Submission',				'NB - Open Submission',				'NB - New Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN3',		'NB - Abandoned Before Prem Est',	'NB - Abandoned Before Prem Est',	'NB - New Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN4',		'NB - Other Exception',				'NB - Other Exception',				'NB - New Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1',		'NB - Quoted',						'NB - Quoted',						'NB - Completed Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_2',		'NB - Open Completed Submission',	'NB - Open Completed Submission',	'NB - Completed Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_3',		'NB - Guard Declined',				'NB - Guard Declined',				'NB - Completed Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_4',		'NB - Agency Withdrawal',			'NB - Agency Withdrawal',			'NB - Completed Submission');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_1',	'NB - Total Written',				'NB - Total Written',				'NB - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_2',	'NB - Open Quote',					'NB - Open Quote',					'NB - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_3',	'NB - Quote Not Taken',				'NB - Quote Not Taken',				'NB - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_3_1',	'NB - Decline - Book of Record',	'NB - Decline - Book of Record',	'NB - Guard Declined');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_3_2',	'NB - Decline - Class of Exposure',	'NB - Decline - Class of Exposure', 'NB - Guard Declined');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_3_3',	'NB - Decline - Questions',			'NB - Decline - Questions',			'NB - Guard Declined');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_3_4',	'NB - Decline - UW',				'NB - Decline - UW',					'NB - Guard Declined');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_4_1',	'NB - After Initial Prem Estimate Quote Not Taken',	'NB - After Initial Prem Estimate Quote Not Taken',	'NB - Agency Withdrawal');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_4_2',	'NB - Not Responding to UW',		'NB - Not Responding to UW',		'NB - Agency Withdrawal');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_4_3',	'NB - Agent Withdraw Before Quote',					'NB - Agent Withdraw Before Quote',					'NB - Agency Withdrawal');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_1_1',	'NB - Issued',										'NB - Issued',										'NB - Total Written');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_1_2',	'NB - Canceled Flat',								'NB - Canceled Flat',								'NB - Total Written');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_1_3',	'NB - Canceled Short Rate',							'NB - Canceled Short Rate',							'NB - Total Written');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LN1_1_1_4',	'NB - Canceled Pro-rata',							'NB - Canceled Pro-rata',							'NB - Total Written');
+
+
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1',		'RN - Quoted',										'RN - Quoted',										'RN - Renewal');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_2',		'RN - Guard Declined',								'RN - Guard Declined',								'RN - Renewal');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_3',		'RN - Other Exception',								'RN - Other Exception',								'RN - Renewal');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_1',	'RN - Pending Proposal',							'RN - Pending Proposal',							'RN - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_2',	'RN - Pending Issuance',							'RN - Pending Issuance',							'RN - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_3',	'RN - Total Written',								'RN - Total Written',								'RN - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_4',	'RN - Open Quote',									'RN - Open Quote',									'RN - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_5',	'RN - Quote Not Taken',								'RN - Quote Not Taken',								'RN - Quoted');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_2_1',	'RN - Decline - Book of Record',					'RN - Decline - Book of Record',					'RN - Guard Declined');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_2_2',	'RN - Decline - UW',								'RN - Decline - UW',									'RN - Guard Declined');
+
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_3_1',	'RN - Issued Paid',									'RN - Issued Paid',									'RN - Total Written');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_3_1',	'RN - Issued Not Paid',								'RN - Issued Not Paid',								'RN - Total Written');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_3_2',  'RN - Canceled Short Rate',							'RN - Canceled Short Rate',							'RN - Total Written');
+INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LR2_1_3_3',	'RN - Canceled Pro-rata',							'RN - Canceled Pro-rata',							'RN - Total Written');
+GO
+
+update dim_policy_status a Set a.Policy_status_parent_key = b.policy_status_key
+from dim_policy_status b on a.Policy_status_parent_cd_bus_key = b.policy_status_cd_bus_key
+go
+OPTION (MAXRECURSION 0);
