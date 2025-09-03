@@ -259,21 +259,113 @@ OPTION (MAXRECURSION 0);
 
 ====================
 
-CREATE TABLE IF NOT EXISTS `dim_policy_status` (
-  `policy_status_key` INT,
-  `policy_status_level` STRING,
-  `policy_status_cd_bus_key` STRING,
-  `policy_status_desc` STRING,
-  `policy_status_parent_cd_bus_key` STRING,
-  `policy_status_parent_key` INT,
-  `dl_eltid` STRING,
-  `dl_runid` STRING,
-  `dl_row_insert_agent` STRING,
-  `dl_row_hash` STRING,
-  `dl_is_current_flag` TINYINT,
-  `dl_row_expiration_date` DATE,
-  `dl_row_effective_date` DATE,
-  `dl_row_update_timestamp` TIMESTAMP,
-  `dl_row_insert_timestamp` TIMESTAMP,
-  `dl_is_deleted_flag` TINYINT
-) USING DELTA
+# Step 7: Create and seed dim_policy_status table
+try:
+    logger.info(f"Creating and seeding {schema_name}.dim_policy_status table")
+    # Define the dim_policy_status table DDL
+    dim_policy_status_ddl = f"""
+    CREATE TABLE IF NOT EXISTS {schema_name}.dim_policy_status (
+        policy_status_key INT,
+        policy_status_level STRING,
+        policy_status_cd_bus_key STRING,
+        policy_status_desc STRING,
+        policy_status_parent_cd_bus_key STRING,
+        policy_status_parent_key INT,
+        dl_eltid STRING,
+        dl_runid STRING,
+        dl_row_insert_agent STRING,
+        dl_row_hash STRING,
+        dl_is_current_flag TINYINT,
+        dl_row_expiration_date DATE,
+        dl_row_effective_date DATE,
+        dl_row_update_timestamp TIMESTAMP,
+        dl_row_insert_timestamp TIMESTAMP,
+        dl_is_deleted_flag TINYINT
+    ) USING DELTA COMMENT 'Dimension table for policy statuses, capturing hierarchy and descriptions';
+    """
+    spark.sql(dim_policy_status_ddl)
+    logger.info(f"Table {schema_name}.dim_policy_status created successfully")
+
+    # Seed the dim_policy_status table using UNION ALL
+    seed_policy_status_query = f"""
+    INSERT INTO {schema_name}.dim_policy_status (
+        policy_status_key,
+        policy_status_level,
+        policy_status_cd_bus_key,
+        policy_status_desc,
+        policy_status_parent_cd_bus_key,
+        dl_is_current_flag,
+        dl_row_effective_date,
+        dl_row_insert_timestamp,
+        dl_is_deleted_flag
+    )
+    SELECT
+        (monotonically_increasing_id() + 1) AS policy_status_key,
+        policy_status_level,
+        policy_status_cd_bus_key,
+        policy_status_desc,
+        policy_status_parent_cd_bus_key,
+        1 AS dl_is_current_flag,
+        current_date() AS dl_row_effective_date,
+        current_timestamp() AS dl_row_insert_timestamp,
+        0 AS dl_is_deleted_flag
+    FROM (
+        SELECT 'LW0' AS policy_status_level, 'Re-write' AS policy_status_cd_bus_key, 'Re-write' AS policy_status_desc, NULL AS policy_status_parent_cd_bus_key
+        UNION ALL SELECT 'LX0', 'Re-issue', 'Re-issue', NULL
+        UNION ALL SELECT 'LN0', 'NB - New Submission', 'NB - New Submission', NULL
+        UNION ALL SELECT 'LR0', 'RN - Renewal', 'RN - Renewal', NULL
+        UNION ALL SELECT 'LZ0', 'Other - Exception', 'Other - Exception', NULL
+        UNION ALL SELECT 'LN1', 'NB - Completed Submission', 'NB - Completed Submission', 'NB - New Submission'
+        UNION ALL SELECT 'LN2', 'NB - Open Submission', 'NB - Open Submission', 'NB - New Submission'
+        UNION ALL SELECT 'LN3', 'NB - Abandoned Before Prem Est', 'NB - Abandoned Before Prem Est', 'NB - New Submission'
+        UNION ALL SELECT 'LN4', 'NB - Other Exception', 'NB - Other Exception', 'NB - New Submission'
+        UNION ALL SELECT 'LN1_1', 'NB - Quoted', 'NB - Quoted', 'NB - Completed Submission'
+        UNION ALL SELECT 'LN1_2', 'NB - Open Completed Submission', 'NB - Open Completed Submission', 'NB - Completed Submission'
+        UNION ALL SELECT 'LN1_3', 'NB - Guard Declined', 'NB - Guard Declined', 'NB - Completed Submission'
+        UNION ALL SELECT 'LN1_4', 'NB - Agency Withdrawal', 'NB - Agency Withdrawal', 'NB - Completed Submission'
+        UNION ALL SELECT 'LN1_1_1', 'NB - Total Written', 'NB - Total Written', 'NB - Quoted'
+        UNION ALL SELECT 'LN1_1_2', 'NB - Open Quote', 'NB - Open Quote', 'NB - Quoted'
+        UNION ALL SELECT 'LN1_1_3', 'NB - Quote Not Taken', 'NB - Quote Not Taken', 'NB - Quoted'
+        UNION ALL SELECT 'LN1_3_1', 'NB - Decline - Book of Record', 'NB - Decline - Book of Record', 'NB - Guard Declined'
+        UNION ALL SELECT 'LN1_3_2', 'NB - Decline - Class of Exposure', 'NB - Decline - Class of Exposure', 'NB - Guard Declined'
+        UNION ALL SELECT 'LN1_3_3', 'NB - Decline - Questions', 'NB - Decline - Questions', 'NB - Guard Declined'
+        UNION ALL SELECT 'LN1_3_4', 'NB - Decline - UW', 'NB - Decline - UW', 'NB - Guard Declined'
+        UNION ALL SELECT 'LN1_4_1', 'NB - After Initial Prem Estimate Quote Not Taken', 'NB - After Initial Prem Estimate Quote Not Taken', 'NB - Agency Withdrawal'
+        UNION ALL SELECT 'LN1_4_2', 'NB - Not Responding to UW', 'NB - Not Responding to UW', 'NB - Agency Withdrawal'
+        UNION ALL SELECT 'LN1_4_3', 'NB - Agent Withdraw Before Quote', 'NB - Agent Withdraw Before Quote', 'NB - Agency Withdrawal'
+        UNION ALL SELECT 'LN1_1_1_1', 'NB - Issued', 'NB - Issued', 'NB - Total Written'
+        UNION ALL SELECT 'LN1_1_1_2', 'NB - Canceled Flat', 'NB - Canceled Flat', 'NB - Total Written'
+        UNION ALL SELECT 'LN1_1_1_3', 'NB - Canceled Short Rate', 'NB - Canceled Short Rate', 'NB - Total Written'
+        UNION ALL SELECT 'LN1_1_1_4', 'NB - Canceled Pro-rata', 'NB - Canceled Pro-rata', 'NB - Total Written'
+        UNION ALL SELECT 'LR2_1', 'RN - Quoted', 'RN - Quoted', 'RN - Renewal'
+        UNION ALL SELECT 'LR2_2', 'RN - Guard Declined', 'RN - Guard Declined', 'RN - Renewal'
+        UNION ALL SELECT 'LR2_3', 'RN - Other Exception', 'RN - Other Exception', 'RN - Renewal'
+        UNION ALL SELECT 'LR2_1_1', 'RN - Pending Proposal', 'RN - Pending Proposal', 'RN - Quoted'
+        UNION ALL SELECT 'LR2_1_2', 'RN - Pending Issuance', 'RN - Pending Issuance', 'RN - Quoted'
+        UNION ALL SELECT 'LR2_1_3', 'RN - Total Written', 'RN - Total Written', 'RN - Quoted'
+        UNION ALL SELECT 'LR2_1_4', 'RN - Open Quote', 'RN - Open Quote', 'RN - Quoted'
+        UNION ALL SELECT 'LR2_1_5', 'RN - Quote Not Taken', 'RN - Quote Not Taken', 'RN - Quoted'
+        UNION ALL SELECT 'LR2_2_1', 'RN - Decline - Book of Record', 'RN - Decline - Book of Record', 'RN - Guard Declined'
+        UNION ALL SELECT 'LR2_2_2', 'RN - Decline - UW', 'RN - Decline - UW', 'RN - Guard Declined'
+        UNION ALL SELECT 'LR2_1_3_1', 'RN - Issued Paid', 'RN - Issued Paid', 'RN - Total Written'
+        UNION ALL SELECT 'LR2_1_3_2', 'RN - Issued Not Paid', 'RN - Issued Not Paid', 'RN - Total Written'
+        UNION ALL SELECT 'LR2_1_3_3', 'RN - Canceled Short Rate', 'RN - Canceled Short Rate', 'RN - Total Written'
+        UNION ALL SELECT 'LR2_1_3_4', 'RN - Canceled Pro-rata', 'RN - Canceled Pro-rata', 'RN - Total Written'
+    ) AS data
+    """
+    spark.sql(seed_policy_status_query)
+    logger.info(f"Table {schema_name}.dim_policy_status seeded successfully")
+
+    # Update policy_status_parent_key
+    update_parent_key_query = f"""
+    MERGE INTO {schema_name}.dim_policy_status AS a
+    USING {schema_name}.dim_policy_status AS b
+    ON a.policy_status_parent_cd_bus_key = b.policy_status_cd_bus_key
+    WHEN MATCHED THEN
+        UPDATE SET a.policy_status_parent_key = b.policy_status_key
+    """
+    spark.sql(update_parent_key_query)
+    logger.info(f"Updated policy_status_parent_key in {schema_name}.dim_policy_status")
+except Exception as e:
+    logger.error(f"Error creating, seeding, or updating {schema_name}.dim_policy_status: {str(e)}")
+    raise
