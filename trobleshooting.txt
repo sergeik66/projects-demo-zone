@@ -260,4 +260,51 @@ CREATE TABLE IF NOT EXISTS `dim_insured_legal_entity_type` (
   `dl_row_insert_timestamp` TIMESTAMP
 ) USING DELTA;
 
+# Import necessary modules
+from pyspark.sql import SparkSession
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Assume the input file is uploaded to the lakehouse Files section
+# Adjust the path if needed, e.g., abfss://<workspace>@<storage>.dfs.core.windows.net/Files/input_file.txt
+file_path = "Files/input_file.txt"  # Relative path in Fabric lakehouse
+
+# Step 1: Read the input file
+try:
+    logger.info(f"Reading file from {file_path}")
+    ddl_content = spark.read.text(file_path).collect()
+    ddl_text = "\n".join([row.value for row in ddl_content])
+    logger.info("File read successfully")
+except Exception as e:
+    logger.error(f"Error reading file: {str(e)}")
+    raise
+
+# Step 2: Parse the DDL statements (assuming statements are separated by ';')
+ddl_statements = [stmt.strip() + ';' for stmt in ddl_text.split(';') if stmt.strip()]
+
+# Step 3: Execute each DDL statement with error handling
+for i, stmt in enumerate(ddl_statements):
+    try:
+        logger.info(f"Executing DDL statement {i+1}: {stmt[:100]}...")  # Log first 100 chars
+        spark.sql(stmt)
+        logger.info(f"DDL statement {i+1} executed successfully")
+    except Exception as e:
+        logger.error(f"Error executing DDL statement {i+1}: {str(e)}")
+        # Continue or raise based on requirement; here we continue to try all
+
+# Step 4: Validation - Check if tables exist
+tables_to_validate = ['dim_lob', 'dim_carrier', 'dim_insured_legal_entity_type']  # Extracted from DDL
+
+for table in tables_to_validate:
+    try:
+        logger.info(f"Validating table: {table}")
+        spark.sql(f"DESCRIBE {table}").show()
+        logger.info(f"Table {table} exists and is valid")
+    except Exception as e:
+        logger.error(f"Validation failed for table {table}: {str(e)}")
+
+logger.info("Notebook execution completed")
 
