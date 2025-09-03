@@ -256,3 +256,24 @@ update dim_policy_status a Set a.Policy_status_parent_key = b.policy_status_key
 from dim_policy_status b on a.Policy_status_parent_cd_bus_key = b.policy_status_cd_bus_key
 go
 OPTION (MAXRECURSION 0);
+
+====================
+
+CREATE TABLE IF NOT EXISTS `dim_policy_status` (
+  `policy_status_key` INT,
+  `policy_status_level` STRING,
+  `policy_status_cd_bus_key` STRING,
+  `policy_status_desc` STRING,
+  `policy_status_parent_cd_bus_key` STRING,
+  `policy_status_parent_key` INT,
+  `dl_eltid` STRING,
+  `dl_runid` STRING,
+  `dl_row_insert_agent` STRING,
+  `dl_row_hash` STRING,
+  `dl_is_current_flag` TINYINT,
+  `dl_row_expiration_date` DATE,
+  `dl_row_effective_date` DATE,
+  `dl_row_update_timestamp` TIMESTAMP,
+  `dl_row_insert_timestamp` TIMESTAMP,
+  `dl_is_deleted_flag` TINYINT
+) USING DELTA
