@@ -1,150 +1,208 @@
-DECLARE @StartDate  date = '20100101';
-
-DECLARE @CutoffDate date = DATEADD(DAY, -1, DATEADD(YEAR, 30, @StartDate));
-
-;WITH seq(n) AS 
-(
-  SELECT 0 UNION ALL SELECT n + 1 FROM seq
-  WHERE n < DATEDIFF(DAY, @StartDate, @CutoffDate)
-),
-d(d) AS 
-(
-  SELECT DATEADD(DAY, n, @StartDate) FROM seq
-),
-src AS
-(
-  SELECT
-    TheDate         = CONVERT(date, d),
-    TheDay          = DATEPART(DAY,       d),
-    TheDayName      = DATENAME(WEEKDAY,   d),
-    TheWeek         = DATEPART(WEEK,      d),
-    TheISOWeek      = DATEPART(ISO_WEEK,  d),
-    TheDayOfWeek    = DATEPART(WEEKDAY,   d),
-    TheMonth        = DATEPART(MONTH,     d),
-    TheMonthName    = DATENAME(MONTH,     d),
-    TheQuarter      = DATEPART(Quarter,   d),
-    TheYear         = DATEPART(YEAR,      d),
-    TheFirstOfMonth = DATEFROMPARTS(YEAR(d), MONTH(d), 1),
-    TheLastOfYear   = DATEFROMPARTS(YEAR(d), 12, 31),
-    TheDayOfYear    = DATEPART(DAYOFYEAR, d)
-  FROM d
-),
-dim AS
-(
-  SELECT
-    TheDate, 
-    TheDay,
-    TheDaySuffix        = CONVERT(char(2), CASE WHEN TheDay / 10 = 1 THEN 'th' ELSE 
-                            CASE RIGHT(TheDay, 1) WHEN '1' THEN 'st' WHEN '2' THEN 'nd' 
-                            WHEN '3' THEN 'rd' ELSE 'th' END END),
-    TheDayName,
-    TheDayOfWeek,
-    TheDayOfWeekInMonth = CONVERT(tinyint, ROW_NUMBER() OVER 
-                            (PARTITION BY TheFirstOfMonth, TheDayOfWeek ORDER BY TheDate)),
-    TheDayOfYear,
-    IsWeekend           = CASE WHEN TheDayOfWeek IN (CASE @@DATEFIRST WHEN 1 THEN 6 WHEN 7 THEN 1 END,7) 
-                            THEN 1 ELSE 0 END,
-    TheWeek,
-    TheISOweek,
-    TheFirstOfWeek      = DATEADD(DAY, 1 - TheDayOfWeek, TheDate),
-    TheLastOfWeek       = DATEADD(DAY, 6, DATEADD(DAY, 1 - TheDayOfWeek, TheDate)),
-    TheWeekOfMonth      = CONVERT(tinyint, DENSE_RANK() OVER 
-                            (PARTITION BY TheYear, TheMonth ORDER BY TheWeek)),
-    TheMonth,
-    TheMonthName,
-    TheFirstOfMonth,
-    TheLastOfMonth      = MAX(TheDate) OVER (PARTITION BY TheYear, TheMonth),
-    TheFirstOfNextMonth = DATEADD(MONTH, 1, TheFirstOfMonth),
-    TheLastOfNextMonth  = DATEADD(DAY, -1, DATEADD(MONTH, 2, TheFirstOfMonth)),
-    TheQuarter,
-	TheYearQuarter = CONVERT(nvarchar, TheYear) + '-Q' + CONVERT(nvarchar, TheQuarter),
-    TheFirstOfQuarter   = MIN(TheDate) OVER (PARTITION BY TheYear, TheQuarter),
-    TheLastOfQuarter    = MAX(TheDate) OVER (PARTITION BY TheYear, TheQuarter),
-    TheYear,
-    TheISOYear          = TheYear - CASE WHEN TheMonth = 1 AND TheISOWeek > 51 THEN 1 
-                            WHEN TheMonth = 12 AND TheISOWeek = 1  THEN -1 ELSE 0 END,      
-    TheFirstOfYear      = DATEFROMPARTS(TheYear, 1,  1),
-    TheLastOfYear,
-    IsLeapYear          = CONVERT(bit, CASE WHEN (TheYear % 400 = 0) 
-                            OR (TheYear % 4 = 0 AND TheYear % 100 <> 0) 
-                            THEN 1 ELSE 0 END),
-    Has53Weeks          = CASE WHEN DATEPART(WEEK,     TheLastOfYear) = 53 THEN 1 ELSE 0 END,
-    Has53ISOWeeks       = CASE WHEN DATEPART(ISO_WEEK, TheLastOfYear) = 53 THEN 1 ELSE 0 END,
-    MMYYYY              = CONVERT(char(2), CONVERT(char(8), TheDate, 101))
-                          + CONVERT(char(4), TheYear),
-    Style101            = CONVERT(char(10), TheDate, 101),
-    Style103            = CONVERT(char(10), TheDate, 103),
-    Style112            = CONVERT(char(8),  TheDate, 112),
-    Style120            = CONVERT(char(10), TheDate, 120),
-	YeartoDate			= Case when (YEAR(Cast(GETDATE() as date)) = YEAR(TheDate)) AND (TheDate < Cast(GETDATE() as date)) THEN 1 ELSE 0 END,
-	PriorYeartoDate	    = Case when (YEAR(DATEADD(year, -1, Cast(GETDATE() as date))) = YEAR(TheDate)) AND (TheDate < DATEADD(year, -1, Cast(GETDATE() as date))) THEN 1 ELSE 0 END,
-	PriorYear			= Case when (YEAR(DATEADD(year, -1, Cast(GETDATE() as date))) = YEAR(TheDate)) THEN 1 ELSE 0 END,
-	Prior2Years			= Case when (YEAR(DATEADD(year, -2, Cast(GETDATE() as date))) = YEAR(TheDate)) THEN 1 ELSE 0 END,
-	Trailing12Months	= Case when TheDate > (DATEADD(month, -12, cast(getdate() as date))) AND (TheDate <= cast(getdate() as date)) THEN 1 ELSE 0 END,
-    PriorMonthYTD		= Case when (YEAR(EOMONTH(dateadd(month, -1, cast(getdate() as date)))) = YEAR(TheDate)) AND (TheDate <= EOMONTH(dateadd(month, -1, cast(getdate() as date)))) THEN 1 ELSE 0 END,
-	PriorMonthPYTD		= Case when (YEAR(DATEADD(year, -1, EOMONTH(dateadd(month, -1, cast(getdate() as date))))) = YEAR(TheDate)) AND (TheDate <= EOMONTH(DATEADD(year, -1, DATEADD(month, -1, CAST(GETDATE() AS date))))) THEN 1 ELSE 0 END,
-	PriorMonthTTM		= Case when TheDate > EOMONTH(DATEADD(month, -12, dateadd(month, -1, cast(getdate() as date)))) AND (TheDate <= EOMONTH(dateadd(month, -1, cast(getdate() as date)))) THEN 1 ELSE 0 END,
-    InforceDateYTD      = Case when TheDate=cast (dateadd(s,-1,datetimefromparts(year(getdate()),month(getdate()),1,0,0,0,0)) as date) then 1 else 0 end,
-	InforceDatePYTD     = Case when TheDate=cast (dateadd(s,-1,datetimefromparts(year(getdate())-1,month(getdate()),1,0,0,0,0)) as date) then 1 else 0 end,
-	PriorMonthPYTTM     = Case when TheDate > EOMONTH((DATEADD(month, -24, dateadd(month, -1, cast(getdate() as date))))) AND (TheDate <= EOMONTH((DATEADD(month, -12, dateadd(month, -1, cast(getdate() as date)))))) THEN 1 ELSE 0 END,
-	CurrentQuarter		= case when TheQuarter  = DATEPART(Quarter,   GetDate()) and TheYear = DATEPART(Year,   GetDate()) then 1 else 0 end,
-	PriorYearQuarter     = case when TheDate >= DATEADD(QUARTER, DATEDIFF(QUARTER, 0, DATEADD(YEAR, -1, GETDATE())), 0) AND TheDate < DATEADD(QUARTER, DATEDIFF(QUARTER, 0, DATEADD(YEAR, -1, GETDATE())) + 1, 0) then 1 else 0 end,
-	PriorTrailing4Quarter = case when TheDate >= DATEADD(QUARTER, DATEDIFF(QUARTER, 0, DATEADD(YEAR, -1, GETDATE())), 0) AND TheDate < DATEADD(QUARTER, DATEDIFF(QUARTER, 0, GETDATE()) , 0) then 1 else 0 end
-  FROM src
-)
-
-
-Select cast(Style112 as int) as datekey,
-    TheDate as [date], 
-    TheDay as [day],
-    TheDaySuffix day_suffix ,      
-    TheDayName day_name,
-    TheDayOfWeek day_of_week,
-    TheDayOfWeekInMonth  day_of_week_in_month,
-    TheDayOfYear   day_of_year,
-    IsWeekend         is_weekened ,
-    TheWeek			[week],
-    TheISOweek     [iso_week],
-    TheFirstOfWeek  [first_of_week]    ,
-    TheLastOfWeek   [last_of_week]   ,
-    TheWeekOfMonth  [week_of_month]   ,
-    TheMonth   [month],
-    TheMonthName [month_name],
-    TheFirstOfMonth   [first_of_month],
-    TheLastOfMonth    [last_of_month]  ,
-    TheFirstOfNextMonth  [first_of_next_month] ,
-    TheLastOfNextMonth  [last_of_next_month],
-    TheQuarter  [quarter],
-	TheYearQuarter   [year_quarter] ,
-    TheFirstOfQuarter [first_of_quarter]  ,
-    TheLastOfQuarter   [last_of_quarter] ,
-    TheYear   [year],
-    TheISOYear    [iso_year]     ,      
-    TheFirstOfYear    [first_of_year]  ,
-    TheLastOfYear    [last_of_year],
-    IsLeapYear         [is_leap_year],
-    Has53Weeks        [has_53_weeks] ,
-    Has53ISOWeeks     [has_53_iso_weeks],
-    MMYYYY            mmyyyy  ,
-    style101            ,
-    style103            ,
-    style112            ,
-    style120            ,
-	YeartoDate		year_to_date	,
-	PriorYeartoDate	 prior_year_to_date  ,
-	PriorYear		prior_year,
-	Prior2Years	    prior_2_years		,
-	Trailing12Months  trailing_12_months	,
-    PriorMonthYTD	prior_month_ytd	,
-	PriorMonthPYTD	prior_month_pytd	,
-	PriorMonthTTM	prior_month_ttm	,
-    InforceDateYTD   inforce_date_ytd ,
-	InforceDatePYTD  inforce_date_pytd ,
-	PriorMonthPYTTM   prior_month_py_ttm ,
-	CurrentQuarter	current_quarter	,
-	PriorYearQuarter    prior_year_quarter
-FROM dim
-ORDER BY TheDate
+# Seed the dim_date table with generated data
+    seed_query = """
+    WITH seq AS (
+        SELECT sequence(to_date('2010-01-01'), date_sub(date_add('2010-01-01', INTERVAL 30 YEARS), 1), INTERVAL 1 DAY) AS date_array
+    ),
+    d AS (
+        SELECT explode(date_array) AS d
+        FROM seq
+    ),
+    src AS (
+        SELECT
+            d AS TheDate,
+            dayofmonth(d) AS TheDay,
+            date_format(d, 'EEEE') AS TheDayName,
+            weekofyear(d) AS TheWeek,
+            weekofyear(d) AS TheISOWeek, -- Spark uses ISO week
+            dayofweek(d) AS TheDayOfWeek,
+            month(d) AS TheMonth,
+            date_format(d, 'MMMM') AS TheMonthName,
+            quarter(d) AS TheQuarter,
+            year(d) AS TheYear,
+            make_date(year(d), month(d), 1) AS TheFirstOfMonth,
+            make_date(year(d), 12, 31) AS TheLastOfYear,
+            dayofyear(d) AS TheDayOfYear
+        FROM d
+    ),
+    dim AS (
+        SELECT
+            TheDate,
+            TheDay,
+            CASE
+                WHEN TheDay / 10 = 1 THEN 'th'
+                ELSE CASE RIGHT(TheDay, 1)
+                    WHEN '1' THEN 'st'
+                    WHEN '2' THEN 'nd'
+                    WHEN '3' THEN 'rd'
+                    ELSE 'th'
+                END
+            END AS TheDaySuffix,
+            TheDayName,
+            TheDayOfWeek,
+            ROW_NUMBER() OVER (PARTITION BY TheFirstOfMonth, TheDayOfWeek ORDER BY TheDate) AS TheDayOfWeekInMonth,
+            TheDayOfYear,
+            CASE
+                WHEN TheDayOfWeek IN (1, 7) THEN 1 -- Assuming Sunday=1, Saturday=7
+                ELSE 0
+            END AS IsWeekend,
+            TheWeek,
+            TheISOWeek,
+            date_sub(TheDate, TheDayOfWeek - 1) AS TheFirstOfWeek,
+            date_add(date_sub(TheDate, TheDayOfWeek - 1), 6) AS TheLastOfWeek,
+            DENSE_RANK() OVER (PARTITION BY TheYear, TheMonth ORDER BY TheWeek) AS TheWeekOfMonth,
+            TheMonth,
+            TheMonthName,
+            TheFirstOfMonth,
+            last_day(TheDate) AS TheLastOfMonth,
+            date_add(TheFirstOfMonth, INTERVAL 1 MONTH) AS TheFirstOfNextMonth,
+            date_sub(date_add(TheFirstOfMonth, INTERVAL 2 MONTH), 1) AS TheLastOfNextMonth,
+            TheQuarter,
+            concat(TheYear, '-Q', TheQuarter) AS TheYearQuarter,
+            MIN(TheDate) OVER (PARTITION BY TheYear, TheQuarter) AS TheFirstOfQuarter,
+            MAX(TheDate) OVER (PARTITION BY TheYear, TheQuarter) AS TheLastOfQuarter,
+            TheYear,
+            TheYear - CASE
+                WHEN TheMonth = 1 AND TheISOWeek > 51 THEN 1
+                WHEN TheMonth = 12 AND TheISOWeek = 1 THEN -1
+                ELSE 0
+            END AS TheISOYear,
+            make_date(TheYear, 1, 1) AS TheFirstOfYear,
+            TheLastOfYear,
+            CASE
+                WHEN (TheYear % 400 = 0) OR (TheYear % 4 = 0 AND TheYear % 100 != 0) THEN 1
+                ELSE 0
+            END AS IsLeapYear,
+            CASE
+                WHEN weekofyear(TheLastOfYear) = 53 THEN 1
+                ELSE 0
+            END AS Has53Weeks,
+            CASE
+                WHEN weekofyear(TheLastOfYear) = 53 THEN 1
+                ELSE 0
+            END AS Has53ISOWeeks,
+            concat(date_format(TheDate, 'MM'), TheYear) AS MMYYYY,
+            date_format(TheDate, 'MM/dd/yyyy') AS Style101,
+            date_format(TheDate, 'dd/MM/yyyy') AS Style103,
+            date_format(TheDate, 'yyyyMMdd') AS Style112,
+            date_format(TheDate, 'yyyy-MM-dd') AS Style120,
+            CASE
+                WHEN year(current_date()) = TheYear AND TheDate < current_date() THEN 1
+                ELSE 0
+            END AS YearToDate,
+            CASE
+                WHEN year(date_sub(current_date(), INTERVAL 1 YEAR)) = TheYear AND TheDate < date_sub(current_date(), INTERVAL 1 YEAR) THEN 1
+                ELSE 0
+            END AS PriorYearToDate,
+            CASE
+                WHEN year(date_sub(current_date(), INTERVAL 1 YEAR)) = TheYear THEN 1
+                ELSE 0
+            END AS PriorYear,
+            CASE
+                WHEN year(date_sub(current_date(), INTERVAL 2 YEAR)) = TheYear THEN 1
+                ELSE 0
+            END AS Prior2Years,
+            CASE
+                WHEN TheDate > date_sub(current_date(), INTERVAL 12 MONTH) AND TheDate <= current_date() THEN 1
+                ELSE 0
+            END AS Trailing12Months,
+            CASE
+                WHEN year(last_day(date_sub(current_date(), INTERVAL 1 MONTH))) = TheYear AND TheDate <= last_day(date_sub(current_date(), INTERVAL 1 MONTH)) THEN 1
+                ELSE 0
+            END AS PriorMonthYTD,
+            CASE
+                WHEN year(last_day(date_sub(current_date(), INTERVAL 13 MONTH))) = TheYear AND TheDate <= last_day(date_sub(current_date(), INTERVAL 13 MONTH)) THEN 1
+                ELSE 0
+            END AS PriorMonthPYTD,
+            CASE
+                WHEN TheDate > last_day(date_sub(current_date(), INTERVAL 13 MONTH)) AND TheDate <= last_day(date_sub(current_date(), INTERVAL 1 MONTH)) THEN 1
+                ELSE 0
+            END AS PriorMonthTTM,
+            CASE
+                WHEN TheDate = date_sub(make_date(year(current_date()), month(current_date()), 1), 1) THEN 1
+                ELSE 0
+            END AS InforceDateYTD,
+            CASE
+                WHEN TheDate = date_sub(make_date(year(current_date()) - 1, month(current_date()), 1), 1) THEN 1
+                ELSE 0
+            END AS InforceDatePYTD,
+            CASE
+                WHEN TheDate > last_day(date_sub(current_date(), INTERVAL 25 MONTH)) AND TheDate <= last_day(date_sub(current_date(), INTERVAL 13 MONTH)) THEN 1
+                ELSE 0
+            END AS PriorMonthPYTTM,
+            CASE
+                WHEN quarter(current_date()) = TheQuarter AND year(current_date()) = TheYear THEN 1
+                ELSE 0
+            END AS CurrentQuarter,
+            CASE
+                WHEN TheDate >= date_sub(date_trunc('QUARTER', current_date()), INTERVAL 1 YEAR) AND TheDate < date_trunc('QUARTER', current_date()) THEN 1
+                ELSE 0
+            END AS PriorYearQuarter,
+            CASE
+                WHEN TheDate >= date_sub(date_trunc('QUARTER', current_date()), INTERVAL 1 YEAR) AND TheDate < date_trunc('QUARTER', current_date()) THEN 1
+                ELSE 0
+            END AS PriorTrailing4Quarter
+        FROM src
+    )
+    INSERT INTO {schema_name}.dim_date
+    SELECT
+        cast(date_format(TheDate, 'yyyyMMdd') AS INT) AS datekey,
+        TheDate AS `date`,
+        TheDay AS `day`,
+        TheDaySuffix AS day_suffix,
+        TheDayName AS day_name,
+        TheDayOfWeek AS day_of_week,
+        TheDayOfWeekInMonth AS day_of_week_in_month,
+        TheDayOfYear AS day_of_year,
+        IsWeekend AS is_weekend,
+        TheWeek AS `week`,
+        TheISOWeek AS iso_week,
+        TheFirstOfWeek AS first_of_week,
+        TheLastOfWeek AS last_of_week,
+        TheWeekOfMonth AS week_of_month,
+        TheMonth AS `month`,
+        TheMonthName AS month_name,
+        TheFirstOfMonth AS first_of_month,
+        TheLastOfMonth AS last_of_month,
+        TheFirstOfNextMonth AS first_of_next_month,
+        TheLastOfNextMonth AS last_of_next_month,
+        TheQuarter AS `quarter`,
+        TheYearQuarter AS year_quarter,
+        TheFirstOfQuarter AS first_of_quarter,
+        TheLastOfQuarter AS last_of_quarter,
+        TheYear AS `year`,
+        TheISOYear AS iso_year,
+        TheFirstOfYear AS first_of_year,
+        TheLastOfYear AS last_of_year,
+        IsLeapYear AS is_leap_year,
+        Has53Weeks AS has_53_weeks,
+        Has53ISOWeeks AS has_53_iso_weeks,
+        MMYYYY AS mmyyyy,
+        Style101 AS style101,
+        Style103 AS style103,
+        Style112 AS style112,
+        Style120 AS style120,
+        YearToDate AS year_to_date,
+        PriorYearToDate AS prior_year_to_date,
+        PriorYear AS prior_year,
+        Prior2Years AS prior_2_years,
+        Trailing12Months AS trailing_12_months,
+        PriorMonthYTD AS prior_month_ytd,
+        PriorMonthPYTD AS prior_month_pytd,
+        PriorMonthTTM AS prior_month_ttm,
+        InforceDateYTD AS inforce_date_ytd,
+        InforceDatePYTD AS inforce_date_pytd,
+        PriorMonthPYTTM AS prior_month_py_ttm,
+        CurrentQuarter AS current_quarter,
+        PriorYearQuarter AS prior_year_quarter,
+        PriorTrailing4Quarter AS prior_trailing_4_quarter
+    FROM dim
+    ORDER BY TheDate
+    """
+    spark.sql(seed_query)
+    logger.info(f"Table {schema_name}.dim_date seeded successfully")
+except Exception as e:
+    logger.error(f"Error creating or seeding {schema_name}.dim_date: {str(e)}")
+    raise
 ++++++++++++++++++++++++++++++
 
 INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LW0',		'Re-write', 'Re-write', Null);
