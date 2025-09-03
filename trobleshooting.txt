@@ -307,4 +307,66 @@ for table in tables_to_validate:
         logger.error(f"Validation failed for table {table}: {str(e)}")
 
 logger.info("Notebook execution completed")
+=====================================================
+# Import necessary modules
+from pyspark.sql import SparkSession
+import logging
 
+# Configuration
+lakehouse_name = "my_lakehouse"
+schema_name = "test"
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Assume the input file is uploaded to the lakehouse Files section
+file_path = f"abfss://{lakehouse_name}@onelake.dfs.fabric.microsoft.com/Files/input_file.txt"
+
+# Step 1: Read the input file
+try:
+    logger.info(f"Reading file from {file_path}")
+    ddl_content = spark.read.text(file_path).collect()
+    ddl_text = "\n".join([row.value for row in ddl_content])
+    logger.info("File read successfully")
+except Exception as e:
+    logger.error(f"Error reading file: {str(e)}")
+    raise
+
+# Step 2: Ensure schema exists in the lakehouse
+try:
+    logger.info(f"Ensuring schema {schema_name} exists in lakehouse {lakehouse_name}")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {lakehouse_name}.{schema_name}")
+    logger.info(f"Schema {schema_name} ready")
+except Exception as e:
+    logger.error(f"Error creating schema {schema_name}: {str(e)}")
+    raise
+
+# Step 3: Parse the DDL statements (assuming statements are separated by ';')
+ddl_statements = [stmt.strip() + ';' for stmt in ddl_text.split(';') if stmt.strip()]
+
+# Step 4: Execute each DDL statement in the context of the lakehouse and schema
+for i, stmt in enumerate(ddl_statements):
+    try:
+        # Replace CREATE TABLE with fully qualified table name
+        modified_stmt = stmt.replace("CREATE TABLE IF NOT EXISTS `", f"CREATE TABLE IF NOT EXISTS `{lakehouse_name}.{schema_name}.")
+        logger.info(f"Executing DDL statement {i+1}: {modified_stmt[:100]}...")
+        spark.sql(modified_stmt)
+        logger.info(f"DDL statement {i+1} executed successfully")
+    except Exception as e:
+        logger.error(f"Error executing DDL statement {i+1}: {str(e)}")
+        # Continue to try all statements
+        continue
+
+# Step 5: Validation - Check if tables exist in the specified lakehouse and schema
+tables_to_validate = ['dim_lob', 'dim_carrier', 'dim_insured_legal_entity_type']
+
+for table in tables_to_validate:
+    try:
+        logger.info(f"Validating table: {lakehouse_name}.{schema_name}.{table}")
+        spark.sql(f"DESCRIBE {lakehouse_name}.{schema_name}.{table}").show()
+        logger.info(f"Table {lakehouse_name}.{schema_name}.{table} exists and is valid")
+    except Exception as e:
+        logger.error(f"Validation failed for table {lakehouse_name}.{schema_name}.{table}: {str(e)}")
+
+logger.info("Notebook execution completed")
