@@ -203,3 +203,61 @@ try:
 except Exception as e:
     print(f"Error during decryption: {str(e)}")
 
+________________________________
+Create a reusable and environment-aware notebook that automates the initialization and seeding of tables required for the Common Policy Data Product. The notebook should:
+
+Create required tables if they do not exist, using predefined schemas.
+Load default or seed data into the tables from version-controlled sources.
+Be idempotent—safe to run multiple times without causing duplication or data corruption.
+Include logging, error handling, and validation steps to ensure successful execution.
+Support configuration for different environments (e.g., dev, prod) via parameters or environment variables.
+This notebook will be used during deployment or setup to ensure consistent and reliable data product initialization across environments.
+______________________________________
+CREATE TABLE IF NOT EXISTS `dim_lob` (
+  `lob_key` INT,
+  `lob_cd_bus_key` STRING,
+  `lob_desc` STRING,
+  `dl_eltid` STRING,
+  `dl_runid` STRING,
+  `dl_row_insert_agent` STRING,
+  `dl_row_hash` STRING,
+  `dl_is_current_flag` TINYINT,
+  `dl_row_expiration_date` DATE,
+  `dl_row_effective_date` DATE,
+  `dl_row_update_timestamp` TIMESTAMP,
+  `dl_row_insert_timestamp` TIMESTAMP
+) USING DELTA COMMENT "A category of insurance that groups similar types of policies together based on the nature of risk covered. For example, Homeowners Insurance is a line of business for residential property coverage.";
+
+
+CREATE TABLE IF NOT EXISTS `dim_carrier` (
+  `carrier_key` INT,
+  `carrier_type` STRING,
+  `carrier_nm` STRING,
+  `carrier_cd_bus_key` STRING,
+  `dl_eltid` STRING,
+  `dl_runid` STRING,
+  `dl_row_insert_agent` STRING,
+  `dl_row_hash` STRING,
+  `dl_is_current_flag` TINYINT,
+  `dl_row_expiration_date` DATE,
+  `dl_row_effective_date` DATE,
+  `dl_row_update_timestamp` TIMESTAMP,
+  `dl_row_insert_timestamp` TIMESTAMP
+) USING DELTA COMMENT "An insurance company that provides coverage and assumes risk. A carrier can be classified as Admitted OR non-admitted.";
+
+CREATE TABLE IF NOT EXISTS `dim_insured_legal_entity_type` (
+  `insd_leg_ent_type_key` INT,
+  `insd_leg_ent_type_cd_bus_key` STRING,
+  `insd_leg_ent_type_desc` STRING,
+  `dl_eltid` STRING,
+  `dl_runid` STRING,
+  `dl_row_insert_agent` STRING,
+  `dl_row_hash` STRING,
+  `dl_is_current_flag` TINYINT,
+  `dl_row_expiration_date` DATE,
+  `dl_row_effective_date` DATE,
+  `dl_row_update_timestamp` TIMESTAMP,
+  `dl_row_insert_timestamp` TIMESTAMP
+) USING DELTA;
+
+
