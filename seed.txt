@@ -1,4 +1,65 @@
-# Seed the dim_date table with generated data
+# Step 5: Create and seed dim_date table
+try:
+    logger.info(f"Creating and seeding {schema_name}.dim_date table")
+    # Define the dim_date table DDL
+    dim_date_ddl = f"""
+    CREATE TABLE IF NOT EXISTS {schema_name}.dim_date (
+        datekey INT,
+        `date` DATE,
+        `day` TINYINT,
+        day_suffix STRING,
+        day_name STRING,
+        day_of_week TINYINT,
+        day_of_week_in_month TINYINT,
+        day_of_year SMALLINT,
+        is_weekend TINYINT,
+        `week` TINYINT,
+        iso_week TINYINT,
+        first_of_week DATE,
+        last_of_week DATE,
+        week_of_month TINYINT,
+        `month` TINYINT,
+        month_name STRING,
+        first_of_month DATE,
+        last_of_month DATE,
+        first_of_next_month DATE,
+        last_of_next_month DATE,
+        `quarter` TINYINT,
+        year_quarter STRING,
+        first_of_quarter DATE,
+        last_of_quarter DATE,
+        `year` SMALLINT,
+        iso_year SMALLINT,
+        first_of_year DATE,
+        last_of_year DATE,
+        is_leap_year TINYINT,
+        has_53_weeks TINYINT,
+        has_53_iso_weeks TINYINT,
+        mmyyyy STRING,
+        style101 STRING,
+        style103 STRING,
+        style112 STRING,
+        style120 STRING,
+        year_to_date TINYINT,
+        prior_year_to_date TINYINT,
+        prior_year TINYINT,
+        prior_2_years TINYINT,
+        trailing_12_months TINYINT,
+        prior_month_ytd TINYINT,
+        prior_month_pytd TINYINT,
+        prior_month_ttm TINYINT,
+        inforce_date_ytd TINYINT,
+        inforce_date_pytd TINYINT,
+        prior_month_py_ttm TINYINT,
+        current_quarter TINYINT,
+        prior_year_quarter TINYINT,
+        prior_trailing_4_quarter TINYINT
+    ) USING DELTA COMMENT 'Dimension table for dates, containing various date-related attributes for analytics';
+    """
+    spark.sql(dim_date_ddl)
+    logger.info(f"Table {schema_name}.dim_date created successfully")
+
+    # Seed the dim_date table with generated data
     seed_query = """
     WITH seq AS (
         SELECT sequence(to_date('2010-01-01'), date_sub(date_add('2010-01-01', INTERVAL 30 YEARS), 1), INTERVAL 1 DAY) AS date_array
