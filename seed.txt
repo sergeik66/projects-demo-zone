@@ -1,3 +1,4 @@
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "date_sub(current_date(), INTERVAL '1' YEAR)" due to data type mismatch: Parameter 2 requires the ("INT" or "SMALLINT" or "TINYINT") type, however "INTERVAL '1' YEAR" has the type "INTERVAL YEAR".; line 91 pos 26;
 # Step 5: Create and seed dim_date table
 try:
     logger.info(f"Creating and seeding {schema_name}.dim_date table")
