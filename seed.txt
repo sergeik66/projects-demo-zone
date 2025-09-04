@@ -62,7 +62,7 @@ try:
     # Seed the dim_date table with generated data
     seed_query = """
     WITH seq AS (
-        SELECT sequence(to_date('2010-01-01'), date_sub(date_add('2010-01-01', INTERVAL 30 YEARS), 1), INTERVAL 1 DAY) AS date_array
+        SELECT sequence(to_date('2010-01-01'), to_date('2039-12-31'), INTERVAL 1 DAY) AS date_array
     ),
     d AS (
         SELECT explode(date_array) AS d
@@ -74,7 +74,7 @@ try:
             dayofmonth(d) AS TheDay,
             date_format(d, 'EEEE') AS TheDayName,
             weekofyear(d) AS TheWeek,
-            weekofyear(d) AS TheISOWeek, -- Spark uses ISO week
+            weekofyear(d) AS TheISOWeek,
             dayofweek(d) AS TheDayOfWeek,
             month(d) AS TheMonth,
             date_format(d, 'MMMM') AS TheMonthName,
@@ -103,7 +103,7 @@ try:
             ROW_NUMBER() OVER (PARTITION BY TheFirstOfMonth, TheDayOfWeek ORDER BY TheDate) AS TheDayOfWeekInMonth,
             TheDayOfYear,
             CASE
-                WHEN TheDayOfWeek IN (1, 7) THEN 1 -- Assuming Sunday=1, Saturday=7
+                WHEN TheDayOfWeek IN (1, 7) THEN 1
                 ELSE 0
             END AS IsWeekend,
             TheWeek,
@@ -115,8 +115,8 @@ try:
             TheMonthName,
             TheFirstOfMonth,
             last_day(TheDate) AS TheLastOfMonth,
-            date_add(TheFirstOfMonth, INTERVAL 1 MONTH) AS TheFirstOfNextMonth,
-            date_sub(date_add(TheFirstOfMonth, INTERVAL 2 MONTH), 1) AS TheLastOfNextMonth,
+            add_months(TheFirstOfMonth, 1) AS TheFirstOfNextMonth,
+            last_day(add_months(TheFirstOfMonth, 1)) AS TheLastOfNextMonth,
             TheQuarter,
             concat(TheYear, '-Q', TheQuarter) AS TheYearQuarter,
             MIN(TheDate) OVER (PARTITION BY TheYear, TheQuarter) AS TheFirstOfQuarter,
@@ -264,8 +264,6 @@ try:
 except Exception as e:
     logger.error(f"Error creating or seeding {schema_name}.dim_date: {str(e)}")
     raise
-
-[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "date_add(TheFirstOfMonth, INTERVAL '1' MONTH)" due to data type mismatch: Parameter 2 requires the ("INT" or "SMALLINT" or "TINYINT") type, however "INTERVAL '1' MONTH" has the type "INTERVAL MONTH".; line 55 pos 12;
 ++++++++++++++++++++++++++++++
 
 INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LW0',		'Re-write', 'Re-write', Null);
