@@ -1,3 +1,107 @@
+# Import necessary modules
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import monotonically_increasing_id, current_timestamp, current_date, lit, add_months, last_day
+import logging
+import re
+from datetime import datetime
+
+# Configuration constants
+LAKEHOUSE_NAME = "my_lakehouse"
+SCHEMA_NAME = "test"
+FILE_PATH = f"abfss://{LAKEHOUSE_NAME}@onelake.dfs.fabric.microsoft.com/Files/input_file.txt"
+EXPECTED_DIM_DATE_ROWS = 10959  # 10,957 main + 2 default
+EXPECTED_DIM_POLICY_STATUS_ROWS = 42  # 40 main + 2 default
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+def main(spark: SparkSession, run_me: bool = True):
+    """Main function to orchestrate notebook execution."""
+    start_time = datetime.now()
+    logger.info(f"Starting notebook execution at {start_time}")
+    
+    if not run_me:
+        logger.info("run_me is False, skipping notebook execution")
+        return
+    
+    try:
+        # Read DDL file
+        ddl_text = read_input_file(spark, FILE_PATH)
+        
+        # Extract table names
+        table_names = extract_table_names(ddl_text)
+        
+        # Create schema
+        create_schema(spark, SCHEMA_NAME)
+        
+        # Execute DDL statements
+        execute_ddl_statements(spark, SCHEMA_NAME, ddl_text)
+        
+        # Create and seed dim_date
+        create_and_seed_dim_date(spark, SCHEMA_NAME)
+        
+        # Create and seed dim_policy_status
+        create_and_seed_dim_policy_status(spark, SCHEMA_NAME)
+        
+        # Validate tables
+        validate_tables(spark, SCHEMA_NAME, table_names)
+        
+        end_time = datetime.now()
+        logger.info(f"Notebook execution completed successfully at {end_time}. Duration: {end_time - start_time}")
+    except Exception as e:
+        logger.error(f"Notebook execution failed: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    # Initialize Spark session
+    spark = SparkSession.builder.appName("PolicyStatusSeeding").getOrCreate()
+    
+    # Set run_me parameter (default True)
+    run_me = True  # Change to False to skip execution
+    
+    # Validate run_me parameter
+    if not isinstance(run_me, bool):
+        logger.error("run_me parameter must be a boolean")
+        raise ValueError("run_me parameter must be a boolean")
+    
+    # Run main function
+    main(spark, run_me)
+    
+    # Stop Spark session
+    spark.stop()
+
+def validate_tables(spark: SparkSession, schema_name: str, table_names: list):
+    """Validate table existence and row counts."""
+    try:
+        table_names.extend(['dim_date', 'dim_policy_status'])
+        for table in table_names:
+            try:
+                logger.info(f"Validating table: {schema_name}.{table}")
+                spark.sql(f"DESCRIBE {schema_name}.{table}").show()
+                row_count = spark.sql(f"SELECT COUNT(*) AS row_count FROM {schema_name}.{table}").collect()[0]['row_count']
+                if table == 'dim_date':
+                    if row_count != EXPECTED_DIM_DATE_ROWS:
+                        logger.warning(f"Table {schema_name}.dim_date has {row_count} rows, expected {EXPECTED_DIM_DATE_ROWS}")
+                    else:
+                        logger.info(f"Table {schema_name}.dim_date has expected {row_count} rows")
+                elif table == 'dim_policy_status':
+                    if row_count != EXPECTED_DIM_POLICY_STATUS_ROWS:
+                        logger.warning(f"Table {schema_name}.dim_policy_status has {row_count} rows, expected {EXPECTED_DIM_POLICY_STATUS_ROWS}")
+                    else:
+                        logger.info(f"Table {schema_name}.dim_policy_status has expected {row_count} rows")
+                else:
+                    logger.info(f"Table {schema_name}.{table} exists with {row_count} rows")
+            except Exception as e:
+                logger.error(f"Validation failed for table {schema_name}.{table}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error during table validation: {str(e)}")
+        raise
+===========================
 # Step 7: Create and seed dim_policy_status table
 try:
     logger.info(f"Creating and seeding {schema_name}.dim_policy_status table")
