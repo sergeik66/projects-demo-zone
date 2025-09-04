@@ -265,8 +265,7 @@ except Exception as e:
     logger.error(f"Error creating or seeding {schema_name}.dim_date: {str(e)}")
     raise
 
-[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "date_add(2010-01-01, INTERVAL '30' YEAR)" due to data type mismatch: Parameter 2 requires the ("INT" or "SMALLINT" or "TINYINT") type, however "INTERVAL '30' YEAR" has the type "INTERVAL YEAR".; line 2 pos 56;
-'WithCTE
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "date_add(TheFirstOfMonth, INTERVAL '1' MONTH)" due to data type mismatch: Parameter 2 requires the ("INT" or "SMALLINT" or "TINYINT") type, however "INTERVAL '1' MONTH" has the type "INTERVAL MONTH".; line 55 pos 12;
 ++++++++++++++++++++++++++++++
 
 INSERT INTO dim_policy_status(policy_status_level, policy_status_cd_bus_key, policy_status_desc,policy_status_parent_cd_bus_key ) VALUES ('LW0',		'Re-write', 'Re-write', Null);
