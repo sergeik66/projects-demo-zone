@@ -92,45 +92,44 @@ VALUES
 
 ('LR2_3', 'RN - Other Exception', 'RN - Other Exception', 'RN - Renewal', 'RN - Renewal', 'RN - Other Exception', NULL, NULL, NULL)
 
-SELECT 'LW0' AS policy_status_level, 'Re-write' AS policy_status_cd_bus_key, 'Re-write' AS policy_status_desc, NULL AS policy_status_parent_cd_bus_key
-            UNION ALL SELECT 'LX0', 'Re-issue', 'Re-issue', NULL, NULL, NULL, NULL, NULL
-            UNION ALL SELECT 'LN0', 'NB - New Submission', 'NB - New Submission', NULL, NULL, NULL, NULL, NULL
-            UNION ALL SELECT 'LR0', 'RN - Renewal', 'RN - Renewal', NULL, NULL, NULL, NULL, NULL
-            UNION ALL SELECT 'LZ0', 'Other - Exception', 'Other - Exception', NULL, NULL, NULL, NULL, NULL
-            UNION ALL SELECT 'LN1', 'NB - Completed Submission', 'NB - Completed Submission', 'NB - New Submission'
-            UNION ALL SELECT 'LN2', 'NB - Open Submission', 'NB - Open Submission', 'NB - New Submission'
-            UNION ALL SELECT 'LN3', 'NB - Abandoned Before Prem Est', 'NB - Abandoned Before Prem Est', 'NB - New Submission'
-            UNION ALL SELECT 'LN4', 'NB - Other Exception', 'NB - Other Exception', 'NB - New Submission'
-            UNION ALL SELECT 'LN1_1', 'NB - Quoted', 'NB - Quoted', 'NB - Completed Submission'
-            UNION ALL SELECT 'LN1_2', 'NB - Open Completed Submission', 'NB - Open Completed Submission', 'NB - Completed Submission'
-            UNION ALL SELECT 'LN1_3', 'NB - Guard Declined', 'NB - Guard Declined', 'NB - Completed Submission'
-            UNION ALL SELECT 'LN1_4', 'NB - Agency Withdrawal', 'NB - Agency Withdrawal', 'NB - Completed Submission'
-            UNION ALL SELECT 'LN1_1_1', 'NB - Total Written', 'NB - Total Written', 'NB - Quoted'
-            UNION ALL SELECT 'LN1_1_2', 'NB - Open Quote', 'NB - Open Quote', 'NB - Quoted'
-            UNION ALL SELECT 'LN1_1_3', 'NB - Quote Not Taken', 'NB - Quote Not Taken', 'NB - Quoted'
-            UNION ALL SELECT 'LN1_3_1', 'NB - Decline - Book of Record', 'NB - Decline - Book of Record', 'NB - Guard Declined'
-            UNION ALL SELECT 'LN1_3_2', 'NB - Decline - Class of Exposure', 'NB - Decline - Class of Exposure', 'NB - Guard Declined'
-            UNION ALL SELECT 'LN1_3_3', 'NB - Decline - Questions', 'NB - Decline - Questions', 'NB - Guard Declined'
-            UNION ALL SELECT 'LN1_3_4', 'NB - Decline - UW', 'NB - Decline - UW', 'NB - Guard Declined'
-            UNION ALL SELECT 'LN1_4_1', 'NB - After Initial Prem Estimate Quote Not Taken', 'NB - After Initial Prem Estimate Quote Not Taken', 'NB - Agency Withdrawal'
-            UNION ALL SELECT 'LN1_4_2', 'NB - Not Responding to UW', 'NB - Not Responding to UW', 'NB - Agency Withdrawal'
-            UNION ALL SELECT 'LN1_4_3', 'NB - Agent Withdraw Before Quote', 'NB - Agent Withdraw Before Quote', 'NB - Agency Withdrawal'
-            UNION ALL SELECT 'LN1_1_1_1', 'NB - Issued', 'NB - Issued', 'NB - Total Written'
-            UNION ALL SELECT 'LN1_1_1_2', 'NB - Canceled Flat', 'NB - Canceled Flat', 'NB - Total Written'
-            UNION ALL SELECT 'LN1_1_1_3', 'NB - Canceled Short Rate', 'NB - Canceled Short Rate', 'NB - Total Written'
-            UNION ALL SELECT 'LN1_1_1_4', 'NB - Canceled Pro-rata', 'NB - Canceled Pro-rata', 'NB - Total Written'
-            UNION ALL SELECT 'LR2_1', 'RN - Quoted', 'RN - Quoted', 'RN - Renewal'
-            UNION ALL SELECT 'LR2_2', 'RN - Guard Declined', 'RN - Guard Declined', 'RN - Renewal'
-            UNION ALL SELECT 'LR2_3', 'RN - Other Exception', 'RN - Other Exception', 'RN - Renewal'
-            UNION ALL SELECT 'LR2_1_1', 'RN - Pending Proposal', 'RN - Pending Proposal', 'RN - Quoted'
-            UNION ALL SELECT 'LR2_1_2', 'RN - Pending Issuance', 'RN - Pending Issuance', 'RN - Quoted'
-            UNION ALL SELECT 'LR2_1_3', 'RN - Total Written', 'RN - Total Written', 'RN - Quoted'
-            UNION ALL SELECT 'LR2_1_4', 'RN - Open Quote', 'RN - Open Quote', 'RN - Quoted'
-            UNION ALL SELECT 'LR2_1_5', 'RN - Quote Not Taken', 'RN - Quote Not Taken', 'RN - Quoted'
-            UNION ALL SELECT 'LR2_2_1', 'RN - Decline - Book of Record', 'RN - Decline - Book of Record', 'RN - Guard Declined'
-            UNION ALL SELECT 'LR2_2_2', 'RN - Decline - UW', 'RN - Decline - UW', 'RN - Guard Declined'
-            UNION ALL SELECT 'LR2_1_3_1', 'RN - Issued Paid', 'RN - Issued Paid', 'RN - Total Written'
-            UNION ALL SELECT 'LR2_1_3_2', 'RN - Issued Not Paid', 'RN - Issued Not Paid', 'RN - Total Written'
-            UNION ALL SELECT 'LR2_1_3_3', 'RN - Canceled Short Rate', 'RN - Canceled Short Rate', 'RN - Total Written'
-            UNION ALL SELECT 'LR2_1_3_4', 'RN - Canceled Pro-rata', 'RN - Canceled Pro-rata', 'RN - Total Written'
-        ) AS data
+ SELECT 'LN0' AS policy_status_level, 'NB - New Submission' AS policy_status_cd_bus_key, 'NB - New Submission' AS policy_status_desc, NULL AS policy_status_parent_cd_bus_key, 'NB - New Submission' AS l0_level, NULL AS l1_level, NULL AS l2_level, NULL AS l3_level, NULL AS l4_level
+            UNION ALL SELECT 'LR0', 'RN - Renewal', 'RN - Renewal', NULL, 'RN - Renewal', NULL, NULL, NULL, NULL
+            UNION ALL SELECT 'LW0', 'Re-write', 'Re-write', NULL, 'Re-write', NULL, NULL, NULL, NULL
+            UNION ALL SELECT 'LX0', 'Re-issue', 'Re-issue', NULL, 'Re-issue', NULL, NULL, NULL, NULL
+            UNION ALL SELECT 'LZ0', 'Other - Exception', 'Other - Exception', NULL, 'Other - Exception', NULL, NULL, NULL, NULL
+            UNION ALL SELECT 'LN1', 'NB - Completed Submission', 'NB - Completed Submission', 'NB - New Submission', 'NB - New Submission', 'NB - Completed Submission', NULL, NULL, NULL
+            UNION ALL SELECT 'LN1_1', 'NB - Quoted', 'NB - Quoted', 'NB - Completed Submission', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', NULL, NULL
+            UNION ALL SELECT 'LN1_1_1', 'NB - Total Written', 'NB - Total Written', 'NB - Quoted', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Total Written', NULL
+            UNION ALL SELECT 'LN1_1_1_1', 'NB - Issued', 'NB - Issued', 'NB - Total Written', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Total Written', 'NB - Issued'
+            UNION ALL SELECT 'LN1_1_1_2', 'NB - Canceled Flat', 'NB - Canceled Flat', 'NB - Total Written', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Total Written', 'NB - Canceled Flat'
+            UNION ALL SELECT 'LN1_1_1_3', 'NB - Canceled Short Rate', 'NB - Canceled Short Rate', 'NB - Total Written', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Total Written', 'NB - Canceled Short Rate'
+            UNION ALL SELECT 'LN1_1_1_4', 'NB - Canceled Pro-rata', 'NB - Canceled Pro-rata', 'NB - Total Written', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Total Written', 'NB - Canceled Pro-rata'
+            UNION ALL SELECT 'LN1_1_2', 'NB - Open Quote', 'NB - Open Quote', 'NB - Quoted', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Open Quote', NULL
+            UNION ALL SELECT 'LN1_1_3', 'NB - Quote Not Taken', 'NB - Quote Not Taken', 'NB - Quoted', 'NB - New Submission', 'NB - Completed Submission', 'NB - Quoted', 'NB - Quote Not Taken', NULL
+            UNION ALL SELECT 'LN1_2', 'NB - Open Completed Submission', 'NB - Open Completed Submission', 'NB - Completed Submission', 'NB - New Submission', 'NB - Open Completed Submission', NULL, NULL, NULL
+            UNION ALL SELECT 'LN1_3', 'NB - Guard Declined', 'NB - Guard Declined', 'NB - Completed Submission', 'NB - New Submission', 'NB - Completed Submission', 'NB - Guard Declined', NULL, NULL
+            UNION ALL SELECT 'LN1_3_1', 'NB - Decline - Book of Record', 'NB - Decline - Book of Record', 'NB - Guard Declined', 'NB - New Submission', 'NB - Completed Submission', 'NB - Guard Declined', 'NB - Decline - Book of Record', NULL
+            UNION ALL SELECT 'LN1_3_2', 'NB - Decline - Class of Exposure', 'NB - Decline - Class of Exposure', 'NB - Guard Declined', 'NB - New Submission', 'NB - Completed Submission', 'NB - Guard Declined', 'NB - Decline - Class of Exposure', NULL
+            UNION ALL SELECT 'LN1_3_3', 'NB - Decline - Questions', 'NB - Decline - Questions', 'NB - Guard Declined', 'NB - New Submission', 'NB - Completed Submission', 'NB - Guard Declined', 'NB - Decline - Questions', NULL
+            UNION ALL SELECT 'LN1_3_4', 'NB - Decline - UW', 'NB - Decline - UW', 'NB - Guard Declined', 'NB - New Submission', 'NB - Completed Submission', 'NB - Guard Declined', 'NB - Decline - UW', NULL
+            UNION ALL SELECT 'LN1_4', 'NB - Agency Withdrawal', 'NB - Agency Withdrawal', 'NB - Completed Submission', 'NB - New Submission', 'NB - Completed Submission', 'NB - Agency Withdrawal', NULL, NULL
+            UNION ALL SELECT 'LN1_4_1', 'NB - After Initial Prem Estimate Quote Not Taken', 'NB - After Initial Prem Estimate Quote Not Taken', 'NB - Agency Withdrawal', 'NB - New Submission', 'NB - Completed Submission', 'NB - Agency Withdrawal', 'NB - After Initial Prem Estimate Quote Not Taken', NULL
+            UNION ALL SELECT 'LN1_4_2', 'NB - Not Responding to UW', 'NB - Not Responding to UW', 'NB - Agency Withdrawal', 'NB - New Submission', 'NB - Completed Submission', 'NB - Agency Withdrawal', 'NB - Not Responding to UW', NULL
+            UNION ALL SELECT 'LN1_4_3', 'NB - Agent Withdraw Before Quote', 'NB - Agent Withdraw Before Quote', 'NB - Agency Withdrawal', 'NB - New Submission', 'NB - Completed Submission', 'NB - Agency Withdrawal', 'NB - Agent Withdraw Before Quote', NULL
+            UNION ALL SELECT 'LN2', 'NB - Open Submission', 'NB - Open Submission', 'NB - New Submission', 'NB - New Submission', 'NB - Open Submission', NULL, NULL, NULL
+            UNION ALL SELECT 'LN3', 'NB - Abandoned Before Prem Est', 'NB - Abandoned Before Prem Est', 'NB - New Submission', 'NB - New Submission', 'NB - Abandoned Before Prem Est', NULL, NULL, NULL
+            UNION ALL SELECT 'LN4', 'NB - Other Exception', 'NB - Other Exception', 'NB - New Submission', 'NB - New Submission', 'NB - Other Exception', NULL, NULL, NULL
+            UNION ALL SELECT 'LR2_1', 'RN - Quoted', 'RN - Quoted', 'RN - Renewal', 'RN - Renewal', 'RN - Quoted', NULL, NULL, NULL
+            UNION ALL SELECT 'LR2_1_1', 'RN - Pending Proposal', 'RN - Pending Proposal', 'RN - Quoted', 'RN - Renewal', 'RN - Quoted', 'RN - Pending Proposal', NULL, NULL
+            UNION ALL SELECT 'LR2_1_2', 'RN - Pending Issuance', 'RN - Pending Issuance', 'RN - Quoted', 'RN - Renewal', 'RN - Quoted', 'RN - Pending Issuance', NULL, NULL
+            UNION ALL SELECT 'LR2_1_3', 'RN - Total Written', 'RN - Total Written', 'RN - Quoted', 'RN - Renewal', 'RN - Quoted', 'RN - Total Written', NULL, NULL
+            UNION ALL SELECT 'LR2_1_3_1', 'RN - Issued Paid', 'RN - Issued Paid', 'RN - Total Written', 'RN - Renewal', 'RN - Quoted', 'RN - Total Written', 'RN - Issued Paid', NULL
+            UNION ALL SELECT 'LR2_1_3_2', 'RN - Issued Not Paid', 'RN - Issued Not Paid', 'RN - Total Written', 'RN - Renewal', 'RN - Quoted', 'RN - Total Written', 'RN - Issued Not Paid', NULL
+            UNION ALL SELECT 'LR2_1_3_3', 'RN - Canceled Short Rate', 'RN - Canceled Short Rate', 'RN - Total Written', 'RN - Renewal', 'RN - Quoted', 'RN - Total Written', 'RN - Canceled Short Rate', NULL
+            UNION ALL SELECT 'LR2_1_3_4', 'RN - Canceled Pro-rata', 'RN - Canceled Pro-rata', 'RN - Total Written', 'RN - Renewal', 'RN - Quoted', 'RN - Total Written', 'RN - Canceled Pro-rata', NULL
+            UNION ALL SELECT 'LR2_1_4', 'RN - Open Quote', 'RN - Open Quote', 'RN - Quoted', 'RN - Renewal', 'RN - Quoted', 'RN - Open Quote', NULL, NULL
+            UNION ALL SELECT 'LR2_1_5', 'RN - Quote Not Taken', 'RN - Quote Not Taken', 'RN - Quoted', 'RN - Renewal', 'RN - Quoted', 'RN - Quote Not Taken', NULL, NULL
+            UNION ALL SELECT 'LR2_2', 'RN - Guard Declined', 'RN - Guard Declined', 'RN - Renewal', 'RN - Renewal', 'RN - Guard Declined', NULL, NULL, NULL
+            UNION ALL SELECT 'LR2_2_1', 'RN - Decline - Book of Record', 'RN - Decline - Book of Record', 'RN - Guard Declined', 'RN - Renewal', 'RN - Guard Declined', 'RN - Decline - Book of Record', NULL, NULL
+            UNION ALL SELECT 'LR2_2_2', 'RN - Decline - UW', 'RN - Decline - UW', 'RN - Guard Declined', 'RN - Renewal', 'RN - Guard Declined', 'RN - Decline - UW', NULL, NULL
+            UNION ALL SELECT 'LR2_3', 'RN - Other Exception', 'RN - Other Exception', 'RN - Renewal', 'RN - Renewal', 'RN - Other Exception', NULL, NULL, NULL
