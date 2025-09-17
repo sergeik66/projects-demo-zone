@@ -1,0 +1,33 @@
+target:
+  lakehouse: den_lhw_dpr_001_policy_product # keep
+  schema: policy # keep
+  table: dim_carrier # target table
+  load_strategy: merge # scd type
+  key_columns: # is merge key
+    - carrier_cd_bus_key
+  unknown_record: True # keep
+  identity: True # keep
+  identity_column_name: carrier_key # sharepoint first row
+
+source:
+  - name: lookups # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: lookups # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+
+query:
+  - name: dim_carrier # name of the query for it to be referenced by subsequent queries
+    # use lower in where clause
+    sql: select distinct 
+        vals as  carrier_cd_bus_key, 
+        descrip as  carrier_nm,
+        case when LOWER(descrip) = 'azguard' then 'Non-admitted' else 'Admitted' end  as carrier_type
+        , True as dl_is_current_flag
+        ,'1901-01-01' as dl_row_effective_date
+        ,'9999-12-31' as dl_row_expiration_date
+        ,False as dl_is_deleted_flag
+        from lookups 
+        where LOWER(keyfield) =  'carrier'
+          and LOWER(programid) = '*'
+        order by 1
