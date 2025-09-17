@@ -1,0 +1,85 @@
+target:
+  lakehouse: den_lhw_dpr_001_policy_product # keep
+  schema: policy # keep
+  table: dim_insured # target table
+  load_strategy: merge # scd type
+  key_columns: # is merge key
+    - policy_num_bus_key
+  unknown_record: True # keep
+  identity: True # keep
+  identity_column_name: insd_key # sharepoint first row
+  pii_columns:
+    - policy_num_bus_key
+    - mail_add1
+    - mail_add2
+    - mail_city
+    - mail_state
+    - mail_zip
+
+source:
+  - name: insured # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: insured # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: fips # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: fips # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: mgextra # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: mgextra # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: wclocnam # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: wclocnam # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: archive_wclocnam # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: archive_wclocnam # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: archive_insured # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: archive_insured # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_insured_legal_entity_type # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_insured_legal_entity_type # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+
+query:
+  - name: dim_insured # name of the query for it to be referenced by subsequent queries
+    # use lower in where clause
+    sql: select 
+         i.code as policy_num_bus_key
+        , (case when LOWER(i.name)<>'redacted' then coalesce(m.address1, i.address1) else coalesce(am.address1,ai.address1) end) as mail_add1
+        , (case when LOWER(i.name)<>'redacted' then coalesce(m.address2, i.address2) else coalesce(am.address2,ai.address2) end) as mail_add2
+        , (case when LOWER(i.name)<>'redacted' then coalesce(m.city, i.city) else coalesce(am.city,ai.city) end) as mail_city
+        , coalesce(m.state, i.state) as mail_state
+        , left(coalesce(m.zipcode, i.zipcode),5) as mail_zip
+        , f.name as mail_county
+        , (case when LOWER(i.name)<>'redacted' then coalesce(n.text,i.name) else coalesce(an.text,ai.name) end) as insd_nm
+        , lget.insd_leg_ent_type_key as legal_ent_type_key
+        , x.yrbusst as bus_start_year
+        , x.descriptionofoperations as desc_of_ops
+        , i.crmid as crmid
+        , True as dl_is_current_flag
+        ,'1901-01-01' as dl_row_effective_date
+        ,'9999-12-31' as dl_row_expiration_date
+        ,False as dl_is_deleted_flag
+
+        from insured i
+        left outer join mgextra x on i.code=x.code
+        left outer join wclocnam m on i.code=m.code and m.uselocnum='m'
+        left outer join archive_wclocnam am on i.code=am.code and am.uselocnum='m'
+        left outer join wclocnam n on i.code=n.code and n.type='n' and n.uselocnum='n'
+        left outer join archive_wclocnam an on i.code=an.code and an.type='n' and an.uselocnum='n'
+        left outer join archive_insured ai on i.code=ai.code and LOWER(ai.name) <> 'redacted'
+        left outer join dim_insured_legal_entity_type lget on i.biztype = lget.insd_leg_ent_type_cd_bus_key
+        left outer join fips f on f.state = i.state and f.fips = coalesce(m.county, i.county)
