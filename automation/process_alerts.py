@@ -39,7 +39,7 @@ key_vault_name = secretsScope
 
 replacement_tokens = {
     'workspace_name': workspace_name,
-    'workspace_id': error_details
+    'workspace_id': workspace_id
     }
 
 # load template file and replace tokens
