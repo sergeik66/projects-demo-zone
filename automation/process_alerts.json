@@ -1,0 +1,657 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "92cb41ef-75ac-4a2a-bdc1-e264c129c0ca",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    },
+    "nteract": {
+     "transient": {
+      "deleting": false
+     }
+    }
+   },
+   "source": [
+    "## Notebook Overview\n",
+    "\n",
+    "Please refer to the [README file](https://dev.azure.com/BHGDataAndAnalytics/DnA%20Pdt%20and%20Prc/_git/DnA%20Pdt%20and%20Prc%20-%20Comn%20Pdt%20Lyr?path=%2Fdocs%2Fpolicy_dp%2Ffabric%2Fprocess_alerting_events.md&version=GBmain&_a=contents) for detailed instructions and information"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "14a04553-4d52-41fb-a5d6-3a2ddfdaf99e",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:29:12.7313773Z",
+       "execution_start_time": "2025-10-02T14:28:58.5341058Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "a3271cad-9f86-4fb2-8f58-f1a7dc65cb6a",
+       "queued_time": "2025-10-02T14:28:10.0298682Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 5,
+       "statement_ids": [
+        5
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 5, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "<frozen importlib._bootstrap>:283: DeprecationWarning: the load_module() method is deprecated and slated for removal in Python 3.12; use exec_module() instead\n"
+     ]
+    }
+   ],
+   "source": [
+    "import json\n",
+    "import os\n",
+    "import logging\n",
+    "from typing import Dict, Optional\n",
+    "from spark_engine.common.email_util import send_email \n",
+    "from spark_engine.common.lakehouse import LakehouseManager\n",
+    "from datetime import datetime"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "133a1b2c-0f7c-4a0c-92fe-33c6d0cf078d",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    },
+    "tags": [
+     "parameters"
+    ]
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:58:52.4443372Z",
+       "execution_start_time": "2025-10-02T14:58:52.1524603Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "85d651b3-d1ad-4e07-b457-f6e3c6298d0d",
+       "queued_time": "2025-10-02T14:58:52.1513772Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 20,
+       "statement_ids": [
+        20
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 20, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "elt_id = \"111\"\n",
+    "template_name = \"dp_pipeline_completed.json\"\n",
+    "trigger_time = \"2025-09-25T14:54:35.8116097Z\"\n",
+    "pipeline_name = \"test_notebook\"\n",
+    "data_product = \"POLICY\"\n",
+    "database_names = \"GIGINSDATA,PROSPECTHOLDINGARCHIVE\"\n",
+    "workspace_id = \"02c3d55e-485c-419b-b587-21a51aeb261e\"\n",
+    "metadata_lakehouse_id = \"6740d2cc-6489-41d9-af20-315d92df9c07\"\n",
+    "pipeline_id = \"562a842c-a809-4904-8623-8fa80e647a4b\"\n",
+    "run_id = \"84c194e6-944f-4e81-b560-ff40c0d1653c\"\n",
+    "feed_name = \"test\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9ed32314-dd80-4c79-94cd-780ffc114d22",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:29:13.5091445Z",
+       "execution_start_time": "2025-10-02T14:29:13.4562464Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "3b37debf-bf68-4e59-944d-a66b806aeaa0",
+       "queued_time": "2025-10-02T14:29:06.5582948Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 7,
+       "statement_ids": [
+        7
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 7, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "bhg-hub-fabric01-eus-kv\n"
+     ]
+    }
+   ],
+   "source": [
+    "%run den_nbk_pdi_001_workspace_parameters"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "08a0dc3b-53ff-471a-a48e-e1421b71cbde",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:29:13.8140801Z",
+       "execution_start_time": "2025-10-02T14:29:13.5108489Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "bb0c2edc-863f-41ba-806a-1c24e3fec095",
+       "queued_time": "2025-10-02T14:29:08.733275Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 8,
+       "statement_ids": [
+        8
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 8, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# Configure logging\n",
+    "logging.basicConfig(\n",
+    "    level=logging.INFO,\n",
+    "    format='%(asctime)s - %(levelname)s - %(message)s'\n",
+    ")\n",
+    "logger = logging.getLogger(__name__)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e6df796f-35d5-4bfb-9d06-2c41d8478c7e",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:35:16.0263155Z",
+       "execution_start_time": "2025-10-02T14:35:15.7421927Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "03b12018-3b4c-446f-956f-c58ffb5efc81",
+       "queued_time": "2025-10-02T14:35:15.7409803Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 17,
+       "statement_ids": [
+        17
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 17, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "def get_template_location_url(\n",
+    "    lakehouse_name: str = \"den_lhw_pdi_001_metadata\",\n",
+    "    notification_type: str = \"emails\",\n",
+    "    file_name: str = \"\"\n",
+    ") -> Optional[str]:\n",
+    "    \"\"\"\n",
+    "    Get the URL for the template location in the lakehouse.\n",
+    "    \n",
+    "    Args:\n",
+    "        lakehouse_name: Name of the lakehouse\n",
+    "        notification_type: Type of notification (e.g., emails)\n",
+    "        file_name: Name of the template file\n",
+    "    \n",
+    "    Returns:\n",
+    "        String URL path or None if error occurs\n",
+    "    \"\"\"\n",
+    "    try:\n",
+    "        lakehouse_manager = LakehouseManager(lakehouse_name=lakehouse_name)\n",
+    "        template_path = f\"{lakehouse_manager.lakehouse_path}/Files/templates/{notification_type}\"\n",
+    "        return f\"{template_path}/{file_name}\"\n",
+    "    except Exception as e:\n",
+    "        logger.error(f\"Failed to get template location URL: {str(e)}\")\n",
+    "        return None"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "20e3fc45-eded-4296-aed5-468846bb40ce",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:35:13.5567996Z",
+       "execution_start_time": "2025-10-02T14:35:13.2846946Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "7a090a15-d1ab-42b6-8abb-d9b4fb94f6f3",
+       "queued_time": "2025-10-02T14:35:13.2836093Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 16,
+       "statement_ids": [
+        16
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 16, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "def replace_tokens_in_json_object(json_object: Dict, param_dict: Dict) -> Optional[Dict]:\n",
+    "    \"\"\"\n",
+    "    Replace tokens in JSON object with parameter values.\n",
+    "    \n",
+    "    Args:\n",
+    "        json_object: JSON object to process\n",
+    "        param_dict: Dictionary of token-value pairs\n",
+    "    \n",
+    "    Returns:\n",
+    "        Processed JSON dictionary or None if error occurs\n",
+    "    \"\"\"\n",
+    "    try:\n",
+    "        value = json.dumps(json_object)\n",
+    "        for k, v in param_dict.items():\n",
+    "            # Ensure value is string and handle None values\n",
+    "            v = str(v) if v is not None else \"\"\n",
+    "            value = value.replace('{' + k + '}', v)\n",
+    "        return json.loads(value)\n",
+    "    except (json.JSONDecodeError, TypeError) as e:\n",
+    "        logger.error(f\"Error replacing tokens in JSON: {str(e)}\")\n",
+    "        return None"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "56755d66-9824-4a49-9e00-a4b61e6d4409",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:54:45.2647376Z",
+       "execution_start_time": "2025-10-02T14:54:44.9492603Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "35ae4cf8-54aa-467b-99a9-0be7a9299a14",
+       "queued_time": "2025-10-02T14:54:44.948162Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 19,
+       "statement_ids": [
+        19
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 19, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "def read_json_file(file_location: str) -> Optional[Dict]:\n",
+    "    \"\"\"\n",
+    "    Read and parse JSON file from the specified location.\n",
+    "    \n",
+    "    Args:\n",
+    "        file_location: Path to the JSON file\n",
+    "    \n",
+    "    Returns:\n",
+    "        Parsed JSON dictionary or None if error occurs\n",
+    "    \"\"\"\n",
+    "    try:    \n",
+    "        jsonDf = spark.read.text(file_location, wholetext=True)\n",
+    "        content = jsonDf.first()[\"value\"]\n",
+    "        return json.loads(content)\n",
+    "    except (json.JSONDecodeError, Exception) as e:\n",
+    "        logger.error(f\"Error reading JSON file {file_location}: {str(e)}\")\n",
+    "        return None"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "79495176-f5c5-4c8e-aead-acc9863474ee",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T14:35:08.2058558Z",
+       "execution_start_time": "2025-10-02T14:35:07.9021273Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "8adbc2ea-a6b9-4b21-900e-3e892516e549",
+       "queued_time": "2025-10-02T14:35:07.9008445Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 14,
+       "statement_ids": [
+        14
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 14, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "def process_alerts(\n",
+    "    elt_id: str,\n",
+    "    template_name: str,\n",
+    "    trigger_time: str,\n",
+    "    pipeline_name: str,\n",
+    "    data_product: str,\n",
+    "    database_names: str,\n",
+    "    workspace_id: str,\n",
+    "    pipeline_id: str,\n",
+    "    run_id: str,\n",
+    "    feed_name: str\n",
+    ") -> bool:\n",
+    "    \"\"\"\n",
+    "    Main function to process alerts and send email notifications.\n",
+    "    \n",
+    "    Returns:\n",
+    "        True if email sent successfully, False otherwise\n",
+    "    \"\"\"\n",
+    "    try:\n",
+    "        # Validate required parameters\n",
+    "        required_params = {\n",
+    "            'elt_id': elt_id,\n",
+    "            'template_name': template_name,\n",
+    "            'trigger_time': trigger_time,\n",
+    "            'pipeline_name': pipeline_name,\n",
+    "            'data_product': data_product,\n",
+    "            'database_names': database_names,\n",
+    "            'workspace_id': workspace_id,\n",
+    "            'pipeline_id': pipeline_id,\n",
+    "            'run_id': run_id,\n",
+    "            'feed_name': feed_name\n",
+    "        }\n",
+    "        \n",
+    "        for param, value in required_params.items():\n",
+    "            if not value:\n",
+    "                logger.error(f\"Missing required parameter: {param}\")\n",
+    "                raise ValueError(f\"Missing required parameter: {param}\")\n",
+    "\n",
+    "        # Get workspace name and key vault\n",
+    "        try:\n",
+    "            workspace_name = notebookutils.runtime.context.get(\"currentWorkspaceName\")\n",
+    "            key_vault_name = secretsScope\n",
+    "        except Exception as e:\n",
+    "            logger.error(f\"Error getting workspace details: {str(e)}\")\n",
+    "            raise ValueError(\"Failed to get workspace details\")\n",
+    "        \n",
+    "        # Create replacement tokens dictionary\n",
+    "        replacement_tokens = {\n",
+    "            'elt_id': elt_id,\n",
+    "            'template_name': template_name,\n",
+    "            'trigger_time': trigger_time,\n",
+    "            'pipeline_name': pipeline_name,\n",
+    "            'data_product': data_product,\n",
+    "            'database_names': database_names,\n",
+    "            'workspace_id': workspace_id,\n",
+    "            'pipeline_id': pipeline_id,\n",
+    "            'run_id': run_id,\n",
+    "            'workspace_name': workspace_name,\n",
+    "            'feed_name': feed_name\n",
+    "        }\n",
+    "\n",
+    "        # Get template location\n",
+    "        logger.info(f\"Getting template location for: {template_name}\")\n",
+    "        template_location = get_template_location_url(file_name=template_name)\n",
+    "        if not template_location:\n",
+    "            raise ValueError(\"Failed to get template location\")\n",
+    "        logger.info(f\"Template location: {template_location}\")\n",
+    "        # Read and process template\n",
+    "        template_data = read_json_file(template_location)\n",
+    "        if not template_data:\n",
+    "            raise ValueError(\"Failed to read template file\")\n",
+    "\n",
+    "        # Replace tokens\n",
+    "        processed_template = replace_tokens_in_json_object(template_data, replacement_tokens)\n",
+    "        if not processed_template:\n",
+    "            raise ValueError(\"Failed to process template tokens\")\n",
+    "\n",
+    "        # Prepare email parameters\n",
+    "        input_params = {\n",
+    "            \"subject\": processed_template.get(\"subject\", \"\"),\n",
+    "            \"body\": processed_template.get(\"body\", {}).get(\"content\", \"\"),\n",
+    "            \"to_email\": processed_template.get(\"emailRecipient\", \"\"),\n",
+    "            \"from_account\": processed_template.get(\"emailSender\", \"\"),\n",
+    "            \"key_vault_name\": secretsScope\n",
+    "        }\n",
+    "\n",
+    "        # Validate email parameters\n",
+    "        for param in [\"subject\", \"body\", \"to_email\", \"from_account\"]:\n",
+    "            if not input_params[param]:\n",
+    "                logger.error(f\"Missing email parameter: {param}\")\n",
+    "                raise ValueError(f\"Missing email parameter: {param}\")\n",
+    "\n",
+    "        # Send email\n",
+    "        logger.info(\"Sending mail ...\")\n",
+    "        send_email(**input_params)\n",
+    "        return True\n",
+    "\n",
+    "    except Exception as e:\n",
+    "        logger.error(f\"Alert processing error: {str(e)}\")\n",
+    "        return False\n",
+    "    except Exception as e:\n",
+    "        logger.error(f\"Unexpected error in alert processing: {str(e)}\", exc_info=True)\n",
+    "        return False"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5d19e585-2d02-4909-8e43-0cca6003838f",
+   "metadata": {
+    "microsoft": {
+     "language": "python",
+     "language_group": "synapse_pyspark"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.livy.statement-meta+json": {
+       "execution_finish_time": "2025-10-02T15:01:50.1279893Z",
+       "execution_start_time": "2025-10-02T15:01:47.2200959Z",
+       "livy_statement_state": "available",
+       "normalized_state": "finished",
+       "parent_msg_id": "dfc9ac3d-2988-4994-9bef-9030a9bbf022",
+       "queued_time": "2025-10-02T15:01:47.2191186Z",
+       "session_id": "e008bce8-5837-451f-8a2f-f5211da0b440",
+       "session_start_time": null,
+       "spark_pool": null,
+       "state": "finished",
+       "statement_id": 22,
+       "statement_ids": [
+        22
+       ]
+      },
+      "text/plain": [
+       "StatementMeta(, e008bce8-5837-451f-8a2f-f5211da0b440, 22, Finished, Available, Finished)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "2025-10-02 15:01:47,884 - INFO - Workspace name: PdtandPrc-CommPdtLyr-feature-skolpakov\n",
+      "2025-10-02 15:01:47,885 - INFO - Getting template location for: dp_pipeline_completed.json\n",
+      "2025-10-02 15:01:48,039 - INFO - Template location: abfss://02c3d55e-485c-419b-b587-21a51aeb261e@onelake.dfs.fabric.microsoft.com/6740d2cc-6489-41d9-af20-315d92df9c07/Files/templates/emails/dp_pipeline_completed.json\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Mail Sent\n"
+     ]
+    }
+   ],
+   "source": [
+    "if __name__ == \"__main__\":\n",
+    "    # process alerts\n",
+    "    success = process_alerts(\n",
+    "        elt_id=elt_id,\n",
+    "        template_name=template_name,\n",
+    "        trigger_time=trigger_time,\n",
+    "        pipeline_name=pipeline_name,\n",
+    "        data_product=data_product,\n",
+    "        database_names=database_names,\n",
+    "        workspace_id=workspace_id,\n",
+    "        pipeline_id=pipeline_id,\n",
+    "        run_id=run_id,\n",
+    "        feed_name=feed_name\n",
+    "    )\n",
+    "if not success:\n",
+    "    logger.error(\"Alert processing failed\")\n",
+    "    exit(1)"
+   ]
+  }
+ ],
+ "metadata": {
+  "dependencies": {
+   "environment": {
+    "environmentId": "37bb90c3-7a85-414d-a211-fb4227449663",
+    "workspaceId": "02c3d55e-485c-419b-b587-21a51aeb261e"
+   }
+  },
+  "kernel_info": {
+   "name": "synapse_pyspark"
+  },
+  "language_info": {
+   "name": "python"
+  },
+  "microsoft": {
+   "language": "python",
+   "language_group": "synapse_pyspark",
+   "ms_spell_check": {
+    "ms_spell_check_language": "en"
+   }
+  },
+  "nteract": {
+   "version": "nteract-front-end@1.0.0"
+  },
+  "spark_compute": {
+   "compute_id": "/trident/default",
+   "session_options": {
+    "conf": {
+     "spark.synapse.nbs.session.timeout": "1200000"
+    }
+   }
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
