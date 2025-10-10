@@ -1,235 +1,68 @@
-- task: PowerShell@2
-      name: prepShortcutVars
-      displayName: 'Prepare Lakehouse Shortcut Variables'
-      inputs:
-        targetType: 'inline'
-        script: |
-          try {
-              # Initialize empty array for formatted shortcuts
-              $detailedShortcuts = @()
-              $shortcutGroups = @{}
-           
-              Write-Host "##[debug]Processing shortcut variables from environment..."
-           
-              # Iterate through all environment variables
-              foreach ($item in (Get-Item env:*)) {
-                  # Check if it's a shortcut variable (starts with 'shortcut.')
+try {
+    # Get input variables
+    $shortcutsFileName = $env:SHORTCUTS_FILE_NAME
+    $lakehouseName = $env:LAKEHOUSE_NAME
 
-                  if ($item.Name.ToLower().StartsWith('shortcut_')) {
-                      $logicalName = $item.Name.ToLower()
-                  
-                      $logicalName = $logicalName -replace '^shortcut_', 'shortcut.'
+    Write-Host "##[debug]Processing shortcuts file: $shortcutsFileName with lakehouse: $lakehouseName"
 
-                      $lastUnderscoreIndex = $logicalName.LastIndexOf('_')
-                      if ($lastUnderscoreIndex -gt 0) {
-                          $logicalName = $logicalName.Substring(0, $lastUnderscoreIndex) + '.' + $logicalName.Substring($lastUnderscoreIndex + 1)
-                      }
+    # Validate input variables
+    if (-not $shortcutsFileName) {
+        Write-Error "SHORTCUTS_FILE_NAME environment variable is not set"
+        exit 1
+    }
+    if (-not $lakehouseName) {
+        Write-Error "LAKEHOUSE_NAME environment variable is not set"
+        exit 1
+    }
 
-                      Write-Host "##[debug]Found shortcut variable: $($item.Name) = $($item.Value)"
-                   
-                      # Parse the variable name: shortcut.{name}.{property}
-                      $nameParts = $logicalName -split "\."
-                   
-                      # Skip if the format is incorrect
-                      if ($nameParts.Length -ne 3) {
-                          Write-Host "##[warning]Invalid shortcut variable format: $($item.Name). Expected format: shortcut.{name}.{property}"
-                          continue
-                      }
-                   
-                      $shortcutName = $nameParts[1]
-                      $propertyName = $nameParts[2]
-                      $propertyValue = $item.Value
-                   
-                      # Initialize the shortcut object if it doesn't exist
-                      if (-not $shortcutGroups.ContainsKey($shortcutName)) {
-                          $shortcutGroups[$shortcutName] = @{}
-                      }
-                   
-                      # Add the property to the shortcut
-                      $shortcutGroups[$shortcutName][$propertyName] = $propertyValue
-                  }
-              }
-           
-              # Transform the grouped shortcuts into an array of objects
-              foreach ($name in $shortcutGroups.Keys) {
-                  $properties = $shortcutGroups[$name]
-               
-                  # Only add shortcuts that have both required properties
-                  if ($properties.ContainsKey("lakehouse") -and $properties.ContainsKey("workspace")) {
-                      $detailedShortcuts += [PSCustomObject]@{
-                          name = $name
-                          lakehouse = $properties["lakehouse"]
-                          workspace = $properties["workspace"]
-                      }
-                   
-                      Write-Host "##[debug]Added shortcut: $name (Lakehouse: $($properties["lakehouse"]), Workspace: $($properties["workspace"]))"
-                  }
-                  else {
-                      Write-Host "##[warning]Shortcut $name is missing required properties (lakehouse and/or workspace)"
-                  }
-              }
-           
-              # Check if any valid shortcuts were found
-              if ($detailedShortcuts.Count -eq 0) {
-                  Write-Host "##[warning]No valid shortcut variables found with both lakehouse and workspace properties"
-              } else {
-                  Write-Host "##[debug]Processed $($detailedShortcuts.Count) valid shortcut definitions"              
+    # Read and parse the shortcuts JSON file
+    if (-not (Test-Path $shortcutsFileName)) {
+        Write-Error "Shortcuts file not found: $shortcutsFileName"
+        exit 1
+    }
 
-                  # Convert to JSON
-                  $detailedShortcutsJson = $detailedShortcuts | ConvertTo-Json -Depth 5 -Compress
-               
-                  if ($detailedShortcuts.Count -eq 1) {
-                    # prepend and append brackets to make it a JSON array
-                    $detailedShortcutsJson = "[$detailedShortcutsJson]"
-                  }
-                   
-                  # Log the JSON for debugging
-                  Write-Host "##[debug]Detailed Shortcuts JSON: $detailedShortcutsJson"
-               
-                  # Set as pipeline variable
-                  Write-Host "##vso[task.setvariable variable=FABRIC_SHORTCUTS_DETAILED]$detailedShortcutsJson"
-              }
-          } catch {
-              Write-Error "Error processing shortcut variables: $_"
-              Write-Error $_.ScriptStackTrace
-              exit 1
-          }
-          ________________
-[
-  {
-    "name": "dim_terr_mngr",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_employee",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_prod_rel_adv",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_employee",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_tran_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_submission_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_issue_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_inforce_start_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_inforce_end_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_effec_start_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_policy_cancel_date",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_date",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_entered_by",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_employee",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  },
-  {
-    "name": "dim_dec_uw",
-    "path": "/Tables/policy",
-    "target": {
-      "type": "OneLake",
-      "oneLake": {
-        "path": "Tables/policy/dim_employee",
-        "itemId": "00000000-0000-0000-0000-000000000000",
-        "workspaceId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
-  }
-]
+    $shortcutsJson = Get-Content $shortcutsFileName -Raw | ConvertFrom-Json
 
------
-shortcut.dim_adjuster_claim_status.lakehouse - den_lhw_dpr_001_claims_transaction
-shortcut.dim_adjuster_claim_status.workspace - Claims-ClaimsHandling-DEV
+    # Initialize array for detailed shortcuts
+    $detailedShortcuts = @()
+
+    # Process each shortcut entry
+    foreach ($shortcut in $shortcutsJson) {
+        if ($shortcut.name -and $shortcut.target.oneLake.workspaceId) {
+            $detailedShortcuts += [PSCustomObject]@{
+                name = $shortcut.name
+                lakehouse = $lakehouseName
+                workspace = $shortcut.target.oneLake.workspaceId
+            }
+            Write-Host "##[debug]Added shortcut: $($shortcut.name) (Lakehouse: $lakehouseName, Workspace: $($shortcut.target.oneLake.workspaceId))"
+        } else {
+            Write-Host "##[warning]Skipping invalid shortcut entry. Name or workspaceId missing: $($shortcut.name)"
+        }
+    }
+
+    # Check if any valid shortcuts were found
+    if ($detailedShortcuts.Count -eq 0) {
+        Write-Host "##[warning]No valid shortcuts found in $shortcutsFileName"
+        exit 0
+    }
+
+    Write-Host "##[debug]Processed $($detailedShortcuts.Count) valid shortcut definitions"
+
+    # Convert to JSON
+    $detailedShortcutsJson = $detailedShortcuts | ConvertTo-Json -Depth 5 -Compress
+
+    # Ensure JSON is an array
+    if ($detailedShortcuts.Count -eq 1) {
+        $detailedShortcutsJson = "[$detailedShortcutsJson]"
+    }
+
+    # Log the JSON for debugging
+    Write-Host "##[debug]Detailed Shortcuts JSON: $detailedShortcutsJson"
+
+    # Set as pipeline variable
+    Write-Host "##vso[task.setvariable variable=FABRIC_SHORTCUTS_DETAILED]$detailedShortcutsJson"
+} catch {
+    Write-Error "Error processing shortcuts: $_"
+    Write-Error $_.ScriptStackTrace
+    exit 1
+}
