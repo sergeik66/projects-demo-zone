@@ -1,23 +1,64 @@
-select 
-         i.code as policy_num_bus_key
-        , (case when LOWER(trim(i.name))<>'redacted' then coalesce(m.address1, i.address1) else coalesce(am.address1,ai.address1) end) as mail_add1
-        , (case when LOWER(trim(i.name))<>'redacted' then coalesce(m.address2, i.address2) else coalesce(am.address2,ai.address2) end) as mail_add2
-        , (case when LOWER(trim(i.name))<>'redacted' then coalesce(m.city, i.city) else coalesce(am.city,ai.city) end) as mail_city
-        , coalesce(m.state, i.state) as mail_state
-        , left(coalesce(m.zipcode, i.zipcode),5) as mail_zip
-        , f.name as mail_county
-        , (case when LOWER(trim(i.name))<>'redacted' then coalesce(n.text,i.name) else coalesce(an.text,ai.name) end) as insd_nm
-        , COALESCE(lget.insd_leg_ent_type_key, -1) as legal_ent_type_key
-        , x.yrbusst as bus_start_year
-        , x.descriptionofoperations as desc_of_ops
-        , i.crmid as crmid
+🧠 In Fabric OneLake with SQL Endpoint: Are Views Redundant with a Semantic Model?
+Not necessarily. Even though Fabric supports rich semantic modeling (especially via Power BI datasets), SQL views can still play a valuable role depending on your architecture and goals.
 
-        from policy_scu_qa.insured i
-        left outer join policy_scu_qa.mgextra x on lower(trim(i.code))=lower(trim(x.code))
-        left outer join (select distinct code, uselocnum, address1=lower(address1), address2=lower(address2), city=lower(city), state, zipcode, county from policy_scu_qa.wclocnam) m on lower(trim(i.code))=lower(trim(m.code)) and lower(trim(m.uselocnum))='m'
-        left outer join (select distinct code, uselocnum, address1=lower(address1), address2=lower(address2), city=lower(city) from policy_scu_qa.archive_wclocnam) am on lower(trim(i.code))=lower(trim(am.code)) and lower(trim(am.uselocnum))='m'
-        left outer join (select distinct code, type, uselocnum, text from policy_scu_qa.wclocnam) n on lower(trim(i.code))=lower(trim(n.code)) and lower(trim(n.type))='n' and lower(trim(n.uselocnum))='n'
-        left outer join (select distinct code, type, uselocnum, text from policy_scu_qa.archive_wclocnam) an on lower(trim(i.code))=lower(trim(an.code)) and lower(trim(an.type))='n' and lower(trim(an.uselocnum))='n'
-        left outer join (select distinct code, name, address1=lower(address1), address2=lower(address2), city=lower(city) from policy_scu_qa.archive_insured) ai on lower(trim(i.code))=lower(trim(ai.code)) and LOWER(trim(ai.city)) <> 'redacted'
-        left outer join [den_lhw_dpr_001_policy_product].[policy].[dim_insured_legal_entity_type] lget on lower(trim(i.biztype)) = lower(trim(lget.insd_leg_ent_type_cd_bus_key))
-        left outer join policy_scu_qa.fips f on lower(trim(f.state)) = lower(trim(i.state)) and lower(trim(f.fips)) = coalesce(lower(trim(m.county)), lower(trim(i.county)))
+✅ Reasons to Use Views in Fabric OneLake (SQL Endpoint)
+
+
+Data Preparation Before Semantic Modeling
+
+Views can help shape and clean data before it's consumed by Power BI or other semantic layers.
+Example: Flattening nested structures, handling nulls, or applying business rules.
+
+
+
+Reusable Logic Across Multiple Models
+
+If multiple semantic models or tools (e.g., external reporting systems, notebooks) access the same data, views ensure consistency.
+
+
+
+Performance Optimization
+
+Views can pre-filter or pre-aggregate data, reducing load on the semantic model and improving query performance.
+
+
+
+Security and Governance
+
+Views can enforce row-level or column-level security at the SQL layer, which complements or precedes semantic layer security.
+
+
+
+Simplifying Complex Joins
+
+Star schemas often require joining fact and dimension tables. Views can encapsulate these joins, making it easier for downstream consumers.
+
+
+
+
+🚫 When Views Might Be Redundant
+If you're:
+
+Using Power BI semantic models that already define relationships, measures, hierarchies, and security,
+And your data is clean and well-modeled in the lakehouse tables,
+
+Then adding views just to replicate those joins or logic might be unnecessary and could introduce maintenance overhead.
+
+🧩 Best Practice in Fabric Context
+
+
+Use SQL views for:
+
+Data shaping
+Reusable logic
+Security enforcement
+Performance tuning
+
+
+
+Use semantic models for:
+
+Business logic
+Relationships and hierarchies
+KPIs and measures
+User-friendly metadata
