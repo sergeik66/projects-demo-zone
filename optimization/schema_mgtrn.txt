@@ -1,0 +1,258 @@
+col_name,data_type,comment
+id,int,
+code,string,
+trancnt,int,
+state,string,
+typeid,int,
+transcode,string,
+reason,string,
+additional_info,string,
+extra,string,
+effdate,timestamp,
+enteredon,timestamp,
+enteredby,string,
+dl_watermark,timestamp,
+dl_rowhash,string,
+dl_partitionkey,string,
+dl_iscurrent,boolean,
+dl_recordstartdateutc,timestamp,
+dl_recordenddateutc,timestamp,
+dl_createddateutc,timestamp,
+dl_lastmodifiedutc,timestamp,
+dl_sourcefilepath,string,
+dl_sourcefilename,string,
+dl_eltid,string,
+dl_runid,string,
+dl_isdeleted,boolean,
+# Partition Information,,
+# col_name,data_type,comment
+dl_partitionkey,string,
+dl_iscurrent,boolean,
+,,
+# Detailed Table Information,,
+Name,spark_catalog.chimcobldhq2ak34ehgmsp2ge9hiqgrfdlml0p3k9hsn4bah84im8pbebtm6gtqvedhnanpg60olus3fdhkm6uavcdqn4obkcli2as3fdhkm6u8.mgnotrans,
+Type,MANAGED,
+Location,abfss://cd63feda-59d3-40b2-87da-4b2519547f70@onelake.dfs.fabric.microsoft.com/19d6879b-5a1e-44ef-a07d-a23bdce14e0e/Tables/policy/mgnotrans,
+Provider,delta,
+Table Properties,"[delta.checkpoint.writeStatsAsJson=false,delta.checkpoint.writeStatsAsStruct=true,delta.minReaderVersion=1,delta.minWriterVersion=2,delta.parquet.vorder.enabled=true]"  
+
+target:
+  lakehouse: den_lhw_dpr_001_policy_product # keep
+  schema: policy # keep
+  table: fact_policy_transaction_detail # target table
+  load_strategy: merge # scd type
+  key_columns: # is merge key
+    - src_trans_detail_id
+  unknown_record: False # keep
+  identity: False # keep
+
+source:
+  - name: mgnotrans # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: mgnotrans # source tables
+    incremental: True # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: insured # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: insured # source tables
+    incremental: True # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: wcpayrol # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: wcpayrol # source tables
+    incremental: True # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: wcinfo # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: wcinfo # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: uwbuildings # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: uwbuildings # source tables
+    incremental: True # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: mgextra # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: mgextra # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: archive_wcpayrol # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: archive_wcpayrol # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: archive_uwbuildings # source table names
+    lakehouse: den_lhw_scu_001_policy_curated # keep
+    schema: policy # keep
+    table: archive_uwbuildings # source tables
+    incremental: True # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_policy # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_policy # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_date # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_date # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_lob # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_lob # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_dist_chnl # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_dist_chnl # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_insured # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_insured # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_naics # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_naics # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_mkt_type # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_mkt_type # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_prod_src # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_prod_src # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_carrier # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_carrier # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_employee # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_employee # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_business_class # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_business_class # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_policy_trans_type # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_policy_trans_type # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+  - name: dim_policy_trans_subtype # source table names
+    lakehouse: den_lhw_dpr_001_policy_product # keep
+    schema: policy # keep
+    table: dim_policy_trans_subtype # source tables
+    incremental: False # if data is not ingested incrementally, it doesn't make sense to load incrementally here.
+
+query:
+  - name: fact_policy_transaction_detail # name of the query for it to be referenced by subsequent queries
+    # use lower in where clause
+    sql: with WCPAYROLLbase as
+        ( SELECT a.Code, CLASSCODE, CLASSUFFIX, `state`, Sum(Premium) Prem, sum(Exposure) Exposure
+          , ROW_NUMBER() OVER ( partition by a.Code order by Sum(Premium) desc ) as RN
+        from (select code, classcode, classuffix, `state`, premium, exposure, primeseq, seqcode from wcpayrol 
+              union all 
+              select code, classcode, classuffix, `state`, premium, exposure, primeseq, seqcode from archive_wcpayrol
+              ) a 
+
+        Inner JOIN WCINFO b on lower(trim(a.CODE)) = lower(trim(b.CODE)) and lower(trim(a.CLASSCODE)) = lower(trim(b.GOVCLASS))
+        where a.primeseq='1' and a.seqcode='000'
+        Group by a.Code, CLASSCODE, CLASSUFFIX, `state`
+        )
+        , WCPRL as
+        ( SELECT Code, CLASSCODE, CLASSUFFIX, `state` from WCPAYROLLbase where rn=1)
+        , uwBuildingsbase as
+        ( select Code, class , ClassSuffix, bpclass_id
+          , ROW_NUMBER() OVER ( partition by Code order by premium desc, tiv desc ) as RN
+        from (select code, class, classsuffix, bpclass_id, premium, tiv from uwbuildings
+              union all
+              select code, class, classsuffix, bpclass_id, premium, tiv from archive_uwbuildings
+              ) b
+        )
+        , uwB as
+        (  select Code, class , ClassSuffix, bpclass_id  from uwBuildingsbase where rn=1)
+
+        select 
+        COALESCE(dpol.policy_key, -1) as policy_key
+        , COALESCE(dd1.date_key, -1) as policy_effec_start_dt_key
+        , COALESCE(dd2.date_key, -1) as policy_effec_end_dt_key
+        , COALESCE(dd3.date_key, -1) as policy_inforce_start_dt_key
+        , Case when LOWER(trim(i.stat5)) = 'c' then COALESCE(dd4.date_key, -1) else COALESCE(dd2.date_key, -1) end as policy_inforce_end_dt_key
+        , COALESCE(dlob.lob_key, -1) as lob_key
+        , COALESCE(ddc.dist_chnl_key, -1) as dist_chnl_key
+        , COALESCE(dins.insd_key, -1) as insd_key
+        , COALESCE(dnai.naics_key, -1) as naics_key
+        , case when LOWER(trim(i.flags19))='s' then COALESCE(demp2.emp_key, -1) else COALESCE(demp3.emp_key, -1) end as dec_uw_emp_key
+        , COALESCE(dmkt.mkt_type_key, -1) as mkt_type_key
+        , COALESCE(dpro.prod_src_key, -1) as prod_src_key
+        , COALESCE(dcar.carrier_key, -1) as carrier_key
+        , COALESCE(dptt.policy_trans_type_key, -1) as policy_trans_type_key
+        , COALESCE(dd5.date_key, -1) as policy_trans_effec_dt_key
+        , COALESCE(dd6.date_key, -1) as policy_trans_dt_key
+        , a.trancnt as policy_trans_seq_num
+        , a.id as src_trans_detail_id
+        , COALESCE(dpts.policy_trans_subtype_key, -1) as policy_trans_subtype_key
+        , a.extra as extra_info
+        , a.additional_info as additional_info
+        , a.reason as reason_cd
+        , COALESCE(dbc.bus_class_key, -1) as bus_class_key
+        , True as dl_is_current_flag
+        ,'1901-01-01' as dl_row_effective_date
+        ,'9999-12-31' as dl_row_expiration_date
+        ,False as dl_is_deleted_flag
+        , case when lower(trim(dlob.lob_cd_bus_key)) in ('wc', 'ca', 'db', 'pl', 'um', 'up', 'cx', 'cp') and lower(trim(dmkt.mkt_type_desc)) = 'e&s' then 0 else 1 end as dq_rule_558
+        , case when lower(trim(dcar.carrier_cd_bus_key)) = 'paazgu10' and lower(trim(dmkt.mkt_type_desc)) <> 'e&s' then 0 else 1 end as dq_rule_559
+        , case when lower(trim(dlob.lob_cd_bus_key)) not in ('wc', 'bp') and lower(trim(dbc.bus_class_cd_bus_key)) is not null then 0 else 1 end as dq_rule_560
+
+        from mgnotrans a
+        LEFT OUTER JOIN insured i on lower(trim(i.code)) = lower(trim(a.code))
+        Left Outer Join mgextra me on lower(trim(me.code)) = lower(trim(a.code))
+        LEFT OUTER JOIN WCPRL on lower(trim(WCPRL.CODE)) = lower(trim(a.code))
+        LEFT OUTER JOIN uwB on lower(trim(uwB.code)) = lower(trim(a.code))
+
+        left outer join dim_policy dpol on lower(trim(a.code)) = lower(trim(dpol.policy_num_bus_key))
+        left outer join dim_date dd1 on CAST(i.pobegin AS DATE) = dd1.date
+        left outer join dim_date dd2 on CAST(i.poexpir AS DATE) = dd2.date
+        left outer join dim_date dd3 on CAST(i.pobegin AS DATE) = dd3.date
+        left outer join dim_date dd4 on CAST(i.pocancel AS DATE) = dd4.date
+        left outer join dim_lob dlob on lower(trim(i.lob)) = lower(trim(dlob.lob_cd_bus_key))
+        left outer join dim_dist_chnl ddc on LOWER(trim(i.agency)) = LOWER(trim(ddc.agcy_cd_bus_key))
+        left outer join dim_insured dins on lower(trim(i.code)) = lower(trim(dins.policy_num_bus_key))
+        left outer join dim_naics dnai on lower(trim(me.naics)) = lower(trim(dnai.naics_bus_key))
+        left outer join dim_employee demp2 on lower(trim(i.decsbr)) = lower(trim(demp2.emp_cd_bus_key))
+        left outer join dim_employee demp3 on lower(trim(i.decuw)) = lower(trim(demp3.emp_cd_bus_key))
+        left outer join dim_mkt_type dmkt on lower(trim(i.markettype)) = lower(trim(dmkt.mkt_type_cd_bus_key))
+        left outer join dim_prod_src dpro on lower(trim(i.productionsrc)) = lower(trim(dpro.prod_src_cd_bus_key))
+        left outer join dim_carrier dcar on lower(trim(i.carrier)) = lower(trim(dcar.carrier_cd_bus_key))
+        left outer join dim_policy_trans_type dptt on lower(trim(a.transcode)) = lower(trim(dptt.policy_trans_type_cd_bus_key))
+        left outer join dim_date dd5 on CAST(a.effdate AS DATE) = dd5.date
+        left outer join dim_date dd6 on CAST(a.enteredon AS DATE) = dd6.date
+        left outer join dim_policy_trans_subtype dpts on lower(trim(a.typeid)) = lower(trim(dpts.policy_trans_subtype_bus_key))
+
+        left outer join dim_business_class dbc on 
+            lower(trim(dbc.bus_class_cd_bus_key)) = CASE 
+                WHEN LOWER(trim(i.lob)) = 'wc' THEN lower(trim(concat(WCPRL.CLASSCODE, WCPRL.`state`)))
+                WHEN LOWER(trim(i.lob)) = 'bp' THEN lower(trim(uwB.class))
+                ELSE 'not applicable'
+            END
+            AND lower(trim(dbc.bus_class_suffix_bus_key)) = CASE 
+                WHEN LOWER(trim(i.lob)) = 'wc' THEN lower(trim(WCPRL.CLASSUFFIX))
+                WHEN LOWER(trim(i.lob)) = 'bp' THEN lower(trim(uwB.ClassSuffix))
+                ELSE 'not applicable'
+            END
+            AND lower(trim(dbc.bus_class_src_id_bus_key)) = CASE 
+                WHEN LOWER(trim(i.lob)) = 'wc' THEN '0'
+                WHEN LOWER(trim(i.lob)) = 'bp' THEN lower(trim(uwB.bpclass_id))
+                ELSE 'not applicable'
+            END
+
+        WHERE lower(trim(i.code)) = lower(trim(i.basemgacode))
