@@ -1,4 +1,103 @@
 parameters:
+  - name: sqlViewsLakehouse
+    type: string
+    displayName: 'Lakehouse Name for SQL Views Deployment'
+    default: 'den_lhw_pdi_001_policy'  # <<< CHANGE THIS TO YOUR ACTUAL LAKEHOUSE NAME >>>
+  - name: sqlViewsFolder
+    type: string
+    displayName: 'Source folder that contains the .sql view files'
+    default: 'src/sql/views'  # <<< ADJUST IF YOUR VIEWS ARE IN A DIFFERENT FOLDER >>>
+
+# Add this task to the deploy_fabric_resources job` (I recommend placing it after the “Configure and Deploy Reports” task or after “Fabric Data Pipelines Configuration” – anywhere after shortcuts are created and before notebooks are run):    
+    - task: PowerShell@2
+      displayName: 'Deploy SQL Views to Lakehouse SQL Endpoint'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          # Fail on any error
+          $ErrorActionPreference = "Stop"
+
+          $workspaceId = $env:WORKSPACE_ID
+          $lakehouseName = "${{ parameters.sqlViewsLakehouse }}"
+
+          if ([string]::IsNullOrWhiteSpace($lakehouseName)) {
+              Write-Host "No lakehouse specified for SQL views deployment – skipping."
+              exit 0
+          }
+
+          $viewsDirectory = "$(System.DefaultWorkingDirectory)/${{ parameters.sqlViewsFolder }}"
+
+          if (-not (Test-Path $viewsDirectory)) {
+              Write-Host "Views directory '$viewsDirectory' not found – skipping SQL views deployment."
+              exit 0
+          }
+
+          $sqlFiles = Get-ChildItem -Path $viewsDirectory -Filter "*.sql" -Recurse
+
+          if ($sqlFiles.Count -eq 0) {
+              Write-Host "No .sql files found in '$viewsDirectory' – nothing to deploy."
+              exit 0
+          }
+
+          Write-Host "Deploying $($sqlFiles.Count) SQL view script(s) to lakehouse '$lakehouseName' (Workspace ID: $workspaceId)"
+
+          # Use Microsoft.Data.SqlClient if available, otherwise fall back to System.Data.SqlClient (both support AccessToken)
+          try {
+              Add-Type -AssemblyName "Microsoft.Data.SqlClient"
+              $sqlClientAssembly = "Microsoft.Data.SqlClient"
+          } catch {
+              Add-Type -AssemblyName "System.Data.SqlClient"
+              $sqlClientAssembly = "System.Data.SqlClient"
+          }
+
+          $server = "$workspaceId.sql.fabric.microsoft.com"
+
+          $connectionString = "Server=tcp:$server,1433;Initial Catalog=$lakehouseName;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
+
+          $connection = New-Object $sqlClientAssembly.SqlConnection($connectionString)
+
+          # Get AAD token for https://database.windows.net (works for Fabric SQL endpoints)
+          $accessToken = (Get-AzAccessToken -ResourceUrl "https://database.windows.net").Token
+          $connection.AccessToken = $accessToken
+
+          $connection.Open()
+          Write-Host "Connected to SQL endpoint of lakehouse '$lakehouseName'"
+
+          foreach ($file in $sqlFiles) {
+              Write-Host "Executing: $($file.FullName)"
+
+              $scriptContent = Get-Content -Path $file.FullName -Raw
+
+              # Split on GO statements (case-insensitive, handles Windows/Linux line endings)
+              $batches = $scriptContent -split '(?i)\r?\n\s*GO\r?\n' | Where-Object { $_.Trim() -ne '' }
+
+              foreach ($batch in $batches) {
+                  if ($batch.Trim() -eq '') { continue }
+
+                  $command = $connection.CreateCommand()
+                  $command.CommandText = $batch.Trim()
+                  $command.CommandTimeout = 300
+
+                  try {
+                      $rows = $command.ExecuteNonQuery()
+                      Write-Host "   → $rows row(s) affected"
+                  } catch {
+                      Write-Error "FAILED to execute batch in file '$($file.Name)': $_"
+                      $connection.Close()
+                      throw $_
+                  }
+              }
+          }
+
+          $connection.Close()
+          Write-Host "SQL views deployment completed successfully."
+        errorActionPreference: 'Stop'
+        failOnStderr: true
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)  # needed for Get-AzAccessToken in some contexts
+
+parameters:
   - name: isGitConnect
     type: boolean
     displayName: 'Sync Initialize Workspace to Git?'
