@@ -6,33 +6,52 @@
         script: |
           $ErrorActionPreference = "Stop"
 
-          # === INPUTS ===
+          # ------------------------------------------------------------------
+          # INPUT PARAMETERS
+          # ------------------------------------------------------------------
           $workspaceId     = $env:WORKSPACE_ID
           $lakehouseName   = "${{ parameters.sqlViewsLakehouse }}"
-          $sourceFolder    = "$(System.DefaultWorkingDirectory)/${{ parameters.sqlViewsFolder }}"
+          $relativeFolder  = "${{ parameters.sqlViewsFolder }}"   # e.g. src/sql/views
 
+          Write-Host "Workspace ID : $workspaceId"
+          Write-Host "Lakehouse     : $lakehouseName"
+          Write-Host "Views folder  : $relativeFolder"
+
+          # ------------------------------------------------------------------
+          # VALIDATE INPUTS
+          # ------------------------------------------------------------------
           if ([string]::IsNullOrWhiteSpace($lakehouseName)) {
-              Write-Host "##[warning]sqlViewsLakehouse parameter not set – skipping SQL views deployment."
+              Write-Host "##[warning]Parameter sqlViewsLakehouse is empty → skipping SQL views deployment"
               exit 0
           }
 
-          if (-not (Test-Path $sourceFolder)) {
-              Write-Host "##[warning]SQL views folder not found: $sourceFolder – skipping."
+          # Use the most reliable source directory variable
+          $sourceRoot = "$(Build.SourcesDirectory)"
+          $viewsFolder = Join-Path $sourceRoot $relativeFolder
+
+          Write-Host "Looking for SQL files in: $viewsFolder"
+
+          if (-not (Test-Path $viewsFolder -PathType Container)) {
+              Write-Host "##[warning]Folder does not exist: $viewsFolder → skipping deployment"
               exit 0
           }
 
-          $sqlFiles = Get-ChildItem -Path $sourceFolder -Filter "*.sql" -Recurse
+          $sqlFiles = Get-ChildItem -Path $viewsFolder -Filter "*.sql" -Recurse -File
           if ($sqlFiles.Count -eq 0) {
-              Write-Host "No .sql files found in $sourceFolder – nothing to deploy."
+              Write-Host "##[warning]No .sql files found in $viewsFolder → nothing to deploy"
               exit 0
           }
 
-          Write-Host "Deploying $($sqlFiles.Count) SQL view(s) to lakehouse '$lakehouseName'"
+          Write-Host "##[section]Found $($sqlFiles.Count) SQL file(s) to deploy"
 
-          # Load modern SQL client
+          # ------------------------------------------------------------------
+          # Load SQL Client
+          # ------------------------------------------------------------------
           Add-Type -AssemblyName "Microsoft.Data.SqlClient"
 
-          # === Get Lakehouse Item ID via Fabric REST API ===
+          # ------------------------------------------------------------------
+          # Get Lakehouse Item ID (GUID)
+          # ------------------------------------------------------------------
           $headers = @{ Authorization = "Bearer $env:FABRIC_TOKEN" }
           $uri = "https://api.fabric.microsoft.com/v1/workspaces/$workspaceId/items?type=Lakehouse"
 
@@ -40,39 +59,35 @@
           $lakehouse = $items | Where-Object { $_.displayName -eq $lakehouseName }
 
           if (-not $lakehouse) {
-              Write-Error "Lakehouse '$lakehouseName' not found in workspace $workspaceId"
+              Write-Error "Lakehouse named '$lakehouseName' not found in workspace $workspaceId"
               exit 1
           }
 
           $lakehouseId = $lakehouse.id
-          Write-Host "Lakehouse found → ID: $lakehouseId"
+          Write-Host "Lakehouse ID: $lakehouseId"
 
-          # === THIS IS THE ONLY FORMAT THAT WORKS (2025) ===
+          # ------------------------------------------------------------------
+          # Build correct Fabric SQL endpoint (2025 format)
+          # ------------------------------------------------------------------
           $server = "${workspaceId}-${lakehouseId}.datawarehouse.fabric.microsoft.com"
+          $connectionString = "Server=$server;Encrypt=True;TrustServerCertificate=False;Connection Timeout=90;"
 
-          # Minimal connection string – no port, no database name
-          $connectionString = "Server=$server;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
+          Write-Host "Connecting to: $server"
 
           $connection = New-Object Microsoft.Data.SqlClient.SqlConnection($connectionString)
-
-          # AAD token for the SQL endpoint
           $token = (Get-AzAccessToken -ResourceUrl "https://database.windows.net").Token
           $connection.AccessToken = $token
 
-          try {
-              $connection.Open()
-              Write-Host "##[section]Connected successfully to $server"
-          }
-          catch {
-              Write-Error "Failed to connect to $server. Error: $($_.Exception.Message)"
-              throw
-          }
+          try { $connection.Open(); Write-Host "##[section]Connected successfully!" }
+          catch { Write-Error "Connection failed: $($_.Exception.Message)"; throw }
 
+          # ------------------------------------------------------------------
+          # Execute all SQL files
+          # ------------------------------------------------------------------
           foreach ($file in $sqlFiles) {
-              Write-Host "Executing → $($file.Name)"
+              Write-Host "Executing: $($file.Name)"
               $sql = Get-Content -Path $file.FullName -Raw -Encoding UTF8
 
-              # Split on GO (case-insensitive, multiline-safe)
               $batches = $sql -split '(?im)^\s*GO\s*$' |
                          ForEach-Object { $_.Trim() } |
                          Where-Object { $_ }
@@ -82,13 +97,11 @@
                   $cmd.CommandText = $batch
                   $cmd.CommandTimeout = 300
 
-                  try {
-                      $cmd.ExecuteNonQuery() | Out-Null
-                  }
+                  try { $cmd.ExecuteNonQuery() | Out-Null }
                   catch {
-                      Write-Error "Failed in file '$($file.Name)': $($_.Exception.Message)"
-                      Write-Host "##[error]Offending batch:`n$batch"
-                      throw
+                      Write-Host "##[error]Failed in file '$($file.Name)'"
+                      Write-Host "##[error]Batch:`n$batch"
+                      throw $_
                   }
               }
               Write-Host "  Success $($file.Name)"
