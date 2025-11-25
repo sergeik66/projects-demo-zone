@@ -15,87 +15,93 @@ parameters:
         targetType: 'inline'
         pwsh: true
         script: |
-          # Fail on any error
           $ErrorActionPreference = "Stop"
 
           $workspaceId = $env:WORKSPACE_ID
           $lakehouseName = "${{ parameters.sqlViewsLakehouse }}"
 
           if ([string]::IsNullOrWhiteSpace($lakehouseName)) {
-              Write-Host "No lakehouse specified for SQL views deployment – skipping."
+              Write-Host "##[warning]No lakehouse specified for SQL views – skipping."
               exit 0
           }
 
           $viewsDirectory = "$(System.DefaultWorkingDirectory)/${{ parameters.sqlViewsFolder }}"
-
           if (-not (Test-Path $viewsDirectory)) {
-              Write-Host "Views directory '$viewsDirectory' not found – skipping SQL views deployment."
+              Write-Host "##[warning]Views directory '$viewsDirectory' not found – skipping."
               exit 0
           }
 
           $sqlFiles = Get-ChildItem -Path $viewsDirectory -Filter "*.sql" -Recurse
-
           if ($sqlFiles.Count -eq 0) {
-              Write-Host "No .sql files found in '$viewsDirectory' – nothing to deploy."
+              Write-Host "##[warning]No .sql files found in '$viewsDirectory' – nothing to deploy."
               exit 0
           }
 
-          Write-Host "Deploying $($sqlFiles.Count) SQL view script(s) to lakehouse '$lakehouseName' (Workspace ID: $workspaceId)"
+          Write-Host "Deploying $($sqlFiles.Count) SQL view(s) to lakehouse '$lakehouseName' in workspace $workspaceId"
 
-          # Use Microsoft.Data.SqlClient if available, otherwise fall back to System.Data.SqlClient (both support AccessToken)
-          try {
-              Add-Type -AssemblyName "Microsoft.Data.SqlClient"
-              $sqlClientAssembly = "Microsoft.Data.SqlClient"
-          } catch {
-              Add-Type -AssemblyName "System.Data.SqlClient"
-              $sqlClientAssembly = "System.Data.SqlClient"
+          # Load Microsoft.Data.SqlClient (preferred for Fabric TDS endpoints)
+          Add-Type -AssemblyName "Microsoft.Data.SqlClient"
+
+          # Fetch Lakehouse GUID via Fabric REST API
+          $headers = @{
+              "Authorization" = "Bearer $env:FABRIC_TOKEN"
+              "Content-Type" = "application/json"
           }
+          $uri = "https://api.fabric.microsoft.com/v1/workspaces/$workspaceId/items?itemType=LAKEHOUSE"
+          $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get
 
-          $server = "$workspaceId.sql.fabric.microsoft.com"
+          $lakehouseItem = $response.value | Where-Object { $_.displayName -eq $lakehouseName }
+          if (-not $lakehouseItem) {
+              Write-Error "Lakehouse '$lakehouseName' not found in workspace '$workspaceId'"
+              exit 1
+          }
+          $lakehouseId = $lakehouseItem.id
+          Write-Host "Found Lakehouse GUID: $lakehouseId"
 
-          $connectionString = "Server=tcp:$server,1433;Initial Catalog=$lakehouseName;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
+          # Correct Fabric SQL endpoint server format
+          $server = "$workspaceId-$lakehouseId.datawarehouse.fabric.microsoft.com:1433"
+          $connectionString = "Server=tcp:$server;Initial Catalog=$lakehouseName;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
 
-          $connection = New-Object $sqlClientAssembly.SqlConnection($connectionString)
+          $connection = New-Object Microsoft.Data.SqlClient.SqlConnection($connectionString)
 
-          # Get AAD token for https://database.windows.net (works for Fabric SQL endpoints)
-          $accessToken = (Get-AzAccessToken -ResourceUrl "https://database.windows.net").Token
-          $connection.AccessToken = $accessToken
-
+          # Use AAD token for https://database.windows.net (valid for Fabric SQL endpoints)
+          $token = (Get-AzAccessToken -ResourceUrl "https://database.windows.net").Token
+          $connection.AccessToken = $token
           $connection.Open()
-          Write-Host "Connected to SQL endpoint of lakehouse '$lakehouseName'"
+          Write-Host "Connected successfully to Fabric SQL endpoint: $server"
 
           foreach ($file in $sqlFiles) {
-              Write-Host "Executing: $($file.FullName)"
+              Write-Host "Executing file: $($file.Name)"
+              $sqlContent = Get-Content -Path $file.FullName -Raw -Encoding UTF8
 
-              $scriptContent = Get-Content -Path $file.FullName -Raw
-
-              # Split on GO statements (case-insensitive, handles Windows/Linux line endings)
-              $batches = $scriptContent -split '(?i)\r?\n\s*GO\r?\n' | Where-Object { $_.Trim() -ne '' }
+              # Improved GO batch splitting (case-insensitive, handles whitespace/newlines)
+              $batches = $sqlContent -split '(?im)^\s*GO\s*$' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
 
               foreach ($batch in $batches) {
-                  if ($batch.Trim() -eq '') { continue }
-
                   $command = $connection.CreateCommand()
-                  $command.CommandText = $batch.Trim()
-                  $command.CommandTimeout = 300
+                  $command.CommandText = $batch
+                  $command.CommandTimeout = 300  # 5 minutes per batch
 
                   try {
-                      $rows = $command.ExecuteNonQuery()
-                      Write-Host "   → $rows row(s) affected"
+                      $rowsAffected = $command.ExecuteNonQuery()
+                      Write-Host "  → Batch executed: $rowsAffected row(s) affected"
                   } catch {
-                      Write-Error "FAILED to execute batch in file '$($file.Name)': $_"
+                      Write-Error "Failed to execute batch in '$($file.Name)': $($_.Exception.Message)"
                       $connection.Close()
-                      throw $_
+                      throw
                   }
               }
+              Write-Host "  ✓ File '$($file.Name)' completed successfully"
           }
 
           $connection.Close()
-          Write-Host "SQL views deployment completed successfully."
-        errorActionPreference: 'Stop'
+          Write-Host "##[section]All SQL views deployed successfully to lakehouse '$lakehouseName'!"
+        errorActionPreference: 'stop'
         failOnStderr: true
       env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)  # needed for Get-AzAccessToken in some contexts
+        FABRIC_TOKEN: $(FABRIC_TOKEN)
+        WORKSPACE_ID: $(WORKSPACE_ID)
+      condition: and(succeeded(), ne('${{ parameters.sqlViewsLakehouse }}', ''))
 
 parameters:
   - name: isGitConnect
