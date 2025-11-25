@@ -1,3 +1,110 @@
+    - task: PowerShell@2
+      displayName: 'Deploy SQL Views to Lakehouse SQL Endpoint'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $ErrorActionPreference = "Stop"
+
+          # === INPUTS ===
+          $workspaceId     = $env:WORKSPACE_ID
+          $lakehouseName   = "${{ parameters.sqlViewsLakehouse }}"
+          $sourceFolder    = "$(System.DefaultWorkingDirectory)/${{ parameters.sqlViewsFolder }}"
+
+          if ([string]::IsNullOrWhiteSpace($lakehouseName)) {
+              Write-Host "##[warning]sqlViewsLakehouse parameter not set – skipping SQL views deployment."
+              exit 0
+          }
+
+          if (-not (Test-Path $sourceFolder)) {
+              Write-Host "##[warning]SQL views folder not found: $sourceFolder – skipping."
+              exit 0
+          }
+
+          $sqlFiles = Get-ChildItem -Path $sourceFolder -Filter "*.sql" -Recurse
+          if ($sqlFiles.Count -eq 0) {
+              Write-Host "No .sql files found in $sourceFolder – nothing to deploy."
+              exit 0
+          }
+
+          Write-Host "Deploying $($sqlFiles.Count) SQL view(s) to lakehouse '$lakehouseName'"
+
+          # Load modern SQL client
+          Add-Type -AssemblyName "Microsoft.Data.SqlClient"
+
+          # === Get Lakehouse Item ID via Fabric REST API ===
+          $headers = @{ Authorization = "Bearer $env:FABRIC_TOKEN" }
+          $uri = "https://api.fabric.microsoft.com/v1/workspaces/$workspaceId/items?type=Lakehouse"
+
+          $items = (Invoke-RestMethod -Uri $uri -Headers $headers -Method Get).value
+          $lakehouse = $items | Where-Object { $_.displayName -eq $lakehouseName }
+
+          if (-not $lakehouse) {
+              Write-Error "Lakehouse '$lakehouseName' not found in workspace $workspaceId"
+              exit 1
+          }
+
+          $lakehouseId = $lakehouse.id
+          Write-Host "Lakehouse found → ID: $lakehouseId"
+
+          # === THIS IS THE ONLY FORMAT THAT WORKS (2025) ===
+          $server = "${workspaceId}-${lakehouseId}.datawarehouse.fabric.microsoft.com"
+
+          # Minimal connection string – no port, no database name
+          $connectionString = "Server=$server;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
+
+          $connection = New-Object Microsoft.Data.SqlClient.SqlConnection($connectionString)
+
+          # AAD token for the SQL endpoint
+          $token = (Get-AzAccessToken -ResourceUrl "https://database.windows.net").Token
+          $connection.AccessToken = $token
+
+          try {
+              $connection.Open()
+              Write-Host "##[section]Connected successfully to $server"
+          }
+          catch {
+              Write-Error "Failed to connect to $server. Error: $($_.Exception.Message)"
+              throw
+          }
+
+          foreach ($file in $sqlFiles) {
+              Write-Host "Executing → $($file.Name)"
+              $sql = Get-Content -Path $file.FullName -Raw -Encoding UTF8
+
+              # Split on GO (case-insensitive, multiline-safe)
+              $batches = $sql -split '(?im)^\s*GO\s*$' |
+                         ForEach-Object { $_.Trim() } |
+                         Where-Object { $_ }
+
+              foreach ($batch in $batches) {
+                  $cmd = $connection.CreateCommand()
+                  $cmd.CommandText = $batch
+                  $cmd.CommandTimeout = 300
+
+                  try {
+                      $cmd.ExecuteNonQuery() | Out-Null
+                  }
+                  catch {
+                      Write-Error "Failed in file '$($file.Name)': $($_.Exception.Message)"
+                      Write-Host "##[error]Offending batch:`n$batch"
+                      throw
+                  }
+              }
+              Write-Host "  Success $($file.Name)"
+          }
+
+          $connection.Close()
+          Write-Host "##[section]All SQL views deployed successfully to lakehouse '$lakehouseName'!"
+
+        errorActionPreference: 'stop'
+        failOnStderr: true
+
+      env:
+        FABRIC_TOKEN: $(FABRIC_TOKEN)
+        WORKSPACE_ID: $(WORKSPACE_ID)
+
+      condition: and(succeeded(), ne('${{ parameters.sqlViewsLakehouse }}', ''))
 6h47pwihyocerltcbmj6jgzgta-l3k4gas4jcnudnmhegsrv2zgdy.datawarehouse.fabric.microsoft.com
 parameters:
   - name: sqlViewsLakehouse
