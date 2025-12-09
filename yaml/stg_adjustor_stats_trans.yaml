@@ -1,0 +1,203 @@
+target:
+  lakehouse: den_lhw_scu_001_claims_transaction_curated
+  schema: stg_claims_transaction
+  table: stg_adjustor_stats_trans
+  load_strategy: overwrite
+  key_columns: []
+  unknown_record: False
+  identity: False
+
+source:
+  - name: claims_adjustor_stats
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: claims_adjustor_stats
+
+  - name: claimant
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: claimant
+
+  - name: insured
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: insured
+
+  - name: lookups
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: lookups
+
+  - name: lob
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: lob
+
+  - name: employee
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: employee
+
+  - name: tpaasof
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: iis_transaction
+    table: tpaasof
+
+  - name: user_adjustor_groups
+    lakehouse: den_lhw_scu_001_claims_transaction_curated
+    schema: claims_user_data
+    table: user_adjustor_groups
+
+query:
+  - name: filtered_adjustor_stats
+    sql: |
+      SELECT 
+        adjustorstatsid, claimantid, transactiontype, enteredon, lob,
+        coveragecategory, complexity, businessunit, adjustor, adjustorstatus
+      FROM claims_adjustor_stats
+      WHERE UPPER(transactiontype) IN ('N', 'TI', 'SN', 'RO')
+        AND (adjustor <> 11220 OR UPPER(transactiontype) = 'RO')
+        AND adjustorstatus IN (0, 2)
+
+  - name: mcuadj_users
+    sql: |
+      SELECT userid 
+      FROM user_adjustor_groups 
+      WHERE adjustor_group = 'mcuadj'
+
+  - name: lladj_users
+    sql: |
+      SELECT userid 
+      FROM user_adjustor_groups 
+      WHERE adjustor_group = 'lladj'
+
+  - name: pdliadj_users
+    sql: |
+      SELECT userid 
+      FROM user_adjustor_groups 
+      WHERE adjustor_group = 'pdliadj'
+
+  - name: tpa_with_transaction_date
+    sql: |
+      SELECT 
+        a.claimantid,
+        a.enteredon as transaction_date,
+        FIRST_VALUE(t.tpataxid) OVER (
+          PARTITION BY a.claimantid, a.enteredon
+          ORDER BY t.enteredon DESC
+          ROWS UNBOUNDED PRECEDING
+        ) AS latest_tpataxid
+      FROM filtered_adjustor_stats a
+      LEFT JOIN tpaasof t ON a.claimantid = t.claimantid AND t.enteredon <= a.enteredon
+
+  - name: transrec
+    sql: |
+      SELECT 
+        a.adjustorstatsid, 
+        a.claimantid, 
+        a.transactiontype,
+        l.descrip AS transactiondescrip,
+        a.enteredon,
+        CONCAT(YEAR(a.enteredon), '-', LPAD(MONTH(a.enteredon), 2, '0')) AS entered_mo,
+        c.fullclaimnumber,
+        a.lob,
+        REPLACE(lb.lobdescrip, '''', '') AS lob_descrip,
+        i.markettype,
+        l1.descrip AS mkttype_descrip,
+        a.coveragecategory AS cvgcategory,
+        l2.descrip AS cvgcategory_descrip,
+        a.complexity,
+        l4.descrip AS complexity_descrip,
+        a.businessunit AS busunit,
+        l5.descrip AS busunit_descrip,
+        a.adjustor,
+        e.name AS adjustor_name,
+        CASE WHEN uag_mcu.userid IS NOT NULL THEN 'Y' ELSE 'N' END AS mcuadj_YN,
+        CASE WHEN uag_ll.userid IS NOT NULL THEN 'Y' ELSE 'N' END AS lladj_YN,
+        CASE WHEN uag_pd.userid IS NOT NULL THEN 'Y' ELSE 'N' END AS pdliadj_YN,
+        CASE WHEN tpa.latest_tpataxid IS NOT NULL AND tpa.latest_tpataxid != '' THEN 'Y' ELSE 'N' END AS tpa_YN,
+        a.adjustorstatus,
+        l6.descrip AS adjustorstat_descrip,
+        CASE WHEN a.adjustorstatus in (0,2) THEN 'Open' ELSE 'Closed' END AS adjustorstat_group,
+        CASE 
+          WHEN UPPER(a.lob) IN ('WC','DB') THEN REPLACE(lb.lobdescrip, '''', '')
+          WHEN UPPER(a.lob) IN ('BP','HO') AND e.name IN ('Team - BOP*GUARD CAT','Team - HO*GUARD CAT','HO CAT Team*GUARD') THEN 'Property'
+          WHEN UPPER(a.lob) IN ('BP','HO') AND UPPER(a.coveragecategory) = 'PD' AND UPPER(a.complexity) = 'FT' AND uag_ll.userid IS NULL THEN 'Property / Inland Marine'
+          WHEN UPPER(a.lob) IN ('BP','HO') AND UPPER(a.coveragecategory) = 'LI' AND uag_pd.userid IS NOT NULL THEN 'PD Liability'
+          WHEN UPPER(a.lob) IN ('BP','HO') AND UPPER(a.coveragecategory) = 'PD' THEN 'Property'
+          WHEN UPPER(a.lob) IN ('BP','HO') AND UPPER(a.coveragecategory) = 'LI' THEN 'Liability'
+          WHEN UPPER(a.lob) = 'CA' THEN 'Liability'
+          ELSE NULL
+        END AS claimType,
+        CASE 
+          WHEN tpa.latest_tpataxid IS NOT NULL AND tpa.latest_tpataxid != '' THEN 'TPA'
+          WHEN UPPER(a.lob) = 'DB' THEN 'All'
+          WHEN UPPER(a.lob) = 'WC' THEN CONCAT(l5.vals,'-WC')
+          WHEN UPPER(a.lob) IN ('BP','HO') AND e.name IN ('Team - BOP*GUARD CAT','Team - HO*GUARD CAT','HO CAT Team*GUARD') THEN 'CAT Team'
+          WHEN UPPER(a.lob) = 'BP' AND UPPER(a.coveragecategory) = 'PD' AND uag_ll.userid IS NOT NULL THEN 'Large Loss'
+          WHEN UPPER(a.lob) IN ('BP','HO') AND UPPER(a.coveragecategory) = 'LI' AND uag_mcu.userid IS NOT NULL THEN 'MCU'
+          WHEN UPPER(a.lob) = 'CA' AND uag_mcu.userid IS NOT NULL THEN 'MCU'
+          WHEN UPPER(a.lob) IN ('BP','HO','CA') THEN l4.vals
+          ELSE NULL
+        END AS unit,
+        ROW_NUMBER() OVER(PARTITION BY a.claimantid ORDER BY a.enteredon) AS rcount
+      FROM filtered_adjustor_stats a
+      INNER JOIN claimant c ON a.claimantid = c.claimantid
+      INNER JOIN insured i ON c.code = i.code
+      LEFT JOIN lookups l ON  UPPER(l.programid) = 'STATS' AND UPPER(l.keyfield) = 'STATTYPE' AND UPPER(l.vals) = UPPER(a.transactiontype) 
+      LEFT JOIN lob lb ON a.lob = lb.lob
+      LEFT JOIN lookups l1 ON UPPER(l1.programid) = 'INSURED' AND UPPER(l1.keyfield) = 'MARKETTYPE' AND UPPER(l1.vals) = UPPER(i.markettype)
+      LEFT JOIN lookups l2 ON UPPER(l2.programid) = 'WCCLAIM' AND UPPER(l2.keyfield) = 'COVERAGECATEGORY' 
+        AND UPPER(l2.lob) = UPPER(a.lob) AND UPPER(l2.vals) = UPPER(a.coveragecategory)
+      LEFT JOIN lookups l4 ON UPPER(l4.programid) = 'CLAIMANT' AND UPPER(l4.keyfield) = 'COMPLEXITY' AND UPPER(l4.vals) = UPPER(a.complexity)
+      LEFT JOIN lookups l5 ON UPPER(l5.programid) = 'BUSINESS_UNIT' AND UPPER(l5.keyfield) = 'BUSINESS_UNIT' AND UPPER(l5.vals) = UPPER(a.businessunit)
+      LEFT JOIN lookups l6 ON UPPER(l6.programid) = 'NIS_WCCLAIM' AND UPPER(l6.keyfield) = 'ADJUSTORSTATUS' AND UPPER(l6.vals) = UPPER(CAST(a.adjustorstatus AS STRING))
+      LEFT JOIN employee e ON a.adjustor = e.userid
+      LEFT JOIN mcuadj_users uag_mcu ON e.userid = uag_mcu.userid
+      LEFT JOIN lladj_users uag_ll ON e.userid = uag_ll.userid
+      LEFT JOIN pdliadj_users uag_pd ON e.userid = uag_pd.userid
+      LEFT JOIN tpa_with_transaction_date tpa ON a.claimantid = tpa.claimantid AND a.enteredon = tpa.transaction_date
+      WHERE COALESCE(c.voidortransfer, '') = ''
+      ORDER BY a.claimantid, a.enteredon
+
+  - name: stg_adjustor_stats_trans
+    sql: |
+      SELECT 
+        t.adjustorstatsid,
+        CONCAT('EMP-', t.adjustor,'-', UPPER(TRIM(t.cvgcategory))) AS adjustr_bus_key,
+        
+        t.claimantid as claimant_bus_key,
+        t.transactiontype as adjustr_trans_type_bus_key,
+        t.transactiondescrip,
+        t.enteredon AS adjustr_entry_date_bus_key,
+        t.entered_mo,
+        t.fullclaimnumber,
+        t.lob as lob_cd_bus_key,
+        t.lob_descrip,
+        t.markettype AS mkt_type_cd_bus_key,
+        t.mkttype_descrip,
+        t.cvgcategory AS cvrg_category_bus_key,
+        t.cvgcategory_descrip,
+        t.complexity AS complexity_bus_key,
+        t.complexity_descrip,
+        t.busunit AS bus_unit_bus_key,
+        t.busunit_descrip,
+        t.adjustor,
+        t.adjustor_name,
+        t.mcuadj_YN,
+        t.lladj_YN,
+        t.pdliadj_YN,
+        CAST(t.tpa_YN AS boolean) AS is_tpa,
+        t.adjustorstatus as adjustr_status_bus_key,
+        t.adjustorstat_descrip,
+        t.adjustorstat_group,
+        t.rcount AS trancnt,
+        t.claimType,
+        t.unit AS unit_bus_key,
+        tprev.rcount AS prev_trancnt,
+        tprev.claimType AS prevClaimType,
+        tprev.unit AS prev_unit_bus_key,
+        CASE WHEN t.claimType = tprev.claimType AND t.unit = tprev.unit THEN 'N' ELSE 'Y' END AS TrueTransfer
+      FROM transrec t
+      LEFT JOIN transrec tprev ON t.claimantid = tprev.claimantid AND (t.rcount - 1) = tprev.rcount
+      ORDER BY t.claimantid, t.enteredon
