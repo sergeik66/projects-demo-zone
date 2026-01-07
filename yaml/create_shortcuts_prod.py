@@ -270,5 +270,26 @@ res = run(
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 
-details_df = spark.createDataFrame(res["details"])
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+# Normalize data: convert error to string, status_code to int or None
+normalized_details = []
+for row in res["details"]:
+    normalized = {
+        "path": row["path"],
+        "action": row["action"],
+        "status_code": row.get("status_code"),  # Can be None or int
+        "error": str(row.get("error")) if row.get("error") is not None else None
+    }
+    normalized_details.append(normalized)
+
+# Define explicit schema
+schema = StructType([
+    StructField("path", StringType(), True),
+    StructField("action", StringType(), True),
+    StructField("status_code", IntegerType(), True),  # Allows null
+    StructField("error", StringType(), True)         # Always string or null
+])
+
+details_df = spark.createDataFrame(normalized_details, schema=schema)
 display(details_df)
