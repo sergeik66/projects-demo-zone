@@ -1,3 +1,77 @@
 2026-01-08 21:02:27,252 [INFO] Processing shortcut 'prdandprc_policy_dp_datasets' → recursive scan: Files/prdandprc_policy_dp_datasets/**/*.json
 2026-01-08 21:02:29,355 [ERROR] Error processing shortcut 'prdandprc_policy_dp_datasets': [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "lower(path_parts)" due to data type mismatch: Parameter 1 requires the "STRING" type, however "path_parts" has the type "ARRAY<STRING>
 
+    for entry in shortcuts:
+        shortcut_name = entry.get("name")
+        if not shortcut_name:
+            logger.warning("Skipping entry without 'name'")
+            continue
+
+        shortcut_folder = f"Files/{shortcut_name}"
+        json_pattern = f"{shortcut_folder}/**/*.json"   # Recursive
+
+        logger.info(f"Processing shortcut '{shortcut_name}' → recursive scan: {json_pattern}")
+
+        try:
+            df_raw = (
+                spark.read
+                .schema(build_json_schema())
+                .option("multiline", "true")
+                .json(json_pattern)
+            )
+
+            if df_raw.rdd.isEmpty():
+                logger.info(f"No JSON files found under '{shortcut_name}'")
+                continue
+
+            # === FIXED SECTION START ===
+            from pyspark.sql.functions import (
+                input_file_name, split, transform, lower as spark_lower, array_contains
+            )
+
+            df_with_path = df_raw.withColumn("file_path", input_file_name())
+
+            df_with_path = df_with_path.withColumn(
+                "path_parts",
+                split(col("file_path"), "/")
+            )
+
+            df_with_path = df_with_path.withColumn(
+                "lower_parts",
+                transform(col("path_parts"), lambda x: spark_lower(x))
+            )
+
+            df_with_path = df_with_path.withColumn(
+                "has_watermark_folder",
+                array_contains(col("lower_parts"), SKIP_SUBFOLDER_NAME.lower())
+            )
+
+            df_filtered = df_with_path.filter(~col("has_watermark_folder"))
+
+            if df_filtered.rdd.isEmpty():
+                logger.info(f"All JSON files in '{shortcut_name}' are inside a 'watermark' folder → skipped")
+                continue
+
+            df_clean = df_filtered.drop("file_path", "path_parts", "lower_parts", "has_watermark_folder")
+            # === FIXED SECTION END ===
+
+            df_clean = df_clean.withColumn("shortcut_name", lit(shortcut_name))
+
+            for target_col, keys in FIELD_MAPPING.items():
+                nested = ".".join(keys)
+                df_clean = df_clean.withColumn(target_col, col(nested))
+
+            df_final = df_clean.select(
+                "shortcut_name",
+                "dataset_name",
+                "dataset_type_name",
+                "database_name",
+                "source_system_ingest_type",
+                "target_load_type"
+            )
+
+            all_data_frames.append(df_final)
+
+        except Exception as e:
+            logger.error(f"Error processing shortcut '{shortcut_name}': {e}")
+            continue
