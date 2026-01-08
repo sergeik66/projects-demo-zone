@@ -1,0 +1,90 @@
+# Optionally set workspace & lakehouse (item) IDs. If omitted, the script autodetects using sempy.fabric.
+workspaceId: "ab08da5e-0f71-423b-a811-bd0af21f182b"
+lakehouseId: "7c6d771a-3b6f-4042-8a89-1a885973a93c"
+
+# Choose behavior when the same path+name exists: Abort (default) or CreateOrOverwrite
+shortcutConflictPolicy: "CreateOrOverwrite"
+
+# Optional: skip creation if GET says it already exists
+skipIfExists: true
+# Files/datasets/accounting
+shortcuts:
+  - name: "prdandprc_policy_dp_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "02c3d55e-485c-419b-b587-21a51aeb261e"
+        itemId: "6740d2cc-6489-41d9-af20-315d92df9c07"
+        path: "Files/datasets/policy_dp"  
+
+  - name: "prdandprc_policy_dp_init_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "02c3d55e-485c-419b-b587-21a51aeb261e"
+        itemId: "6740d2cc-6489-41d9-af20-315d92df9c07"
+        path: "Files/datasets/policy_dp_init"  
+
+  - name: "ppm_naics_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "399bb77c-e9a6-4ee5-9161-ffd60248ddc7"
+        itemId: "b541c254-030c-490c-9d4b-669c952d4609"
+        path: "Files/datasets/naics"  
+
+  - name: "ppm_business_performance_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "399bb77c-e9a6-4ee5-9161-ffd60248ddc7"
+        itemId: "b541c254-030c-490c-9d4b-669c952d4609"
+        path: "Files/datasets/pc_business_performance"  
+
+  - name: "ppm_business_performance_history_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "399bb77c-e9a6-4ee5-9161-ffd60248ddc7"
+        itemId: "b541c254-030c-490c-9d4b-669c952d4609"
+        path: "Files/datasets/pc_business_performance_history"  
+
+  - name: "claims_handling_accounting_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "1e139fac-e1b9-4677-8d87-4c14fff3724a"
+        itemId: "6dc7b1ae-adc8-4a59-937a-a04332f85054"
+        path: "Files/datasets/accounting"  
+
+  - name: "claims_handling_iis_data_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "1e139fac-e1b9-4677-8d87-4c14fff3724a"
+        itemId: "6dc7b1ae-adc8-4a59-937a-a04332f85054"
+        path: "Files/datasets/iis_data"  
+
+  - name: "claims_handling_iis_transaction_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "1e139fac-e1b9-4677-8d87-4c14fff3724a"
+        itemId: "6dc7b1ae-adc8-4a59-937a-a04332f85054"
+        path: "Files/datasets/iis_transaction"  
+
+  - name: "claims_handling_iis_transaction_historical_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "1e139fac-e1b9-4677-8d87-4c14fff3724a"
+        itemId: "6dc7b1ae-adc8-4a59-937a-a04332f85054"
+        path: "Files/datasets/iis_transaction_historical"  
+
+  - name: "claims_handling_staffing_model_datasets"
+    path: "Files/"
+    target:
+      oneLake:
+        workspaceId: "1e139fac-e1b9-4677-8d87-4c14fff3724a"
+        itemId: "6dc7b1ae-adc8-4a59-937a-a04332f85054"
+        path: "Files/datasets/staffing_model"  
