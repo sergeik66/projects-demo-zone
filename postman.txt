@@ -1,19 +1,37 @@
-Fixed Version (Replace the JSON reading and extraction part)
-Why This Works Better
+def run_load_datasets_metadata():
+    ensure_target_table()
 
-Reads the entire JSON file as a string → no schema mismatch
-Uses from_json with MapType(String, String) → treats everything as key-value, very forgiving
-Allows extra fields in nested objects without failing
-Still supports multiline JSON
-Keeps watermark folder skipping intact
+    logger.info(f"Loading shortcuts config from {CONFIG_PATH}")
+    config = load_shortcuts_config(CONFIG_PATH)
+    shortcuts = config.get("shortcuts", [])
 
-Replace Only This Part
-Replace everything from df_raw = spark.read... down to the df_final creation with the code block above.
-# --- RELIABLE METHOD: Read as wholeTextFiles (string) ---
-            from pyspark.sql.functions import input_file_name
+    if not shortcuts:
+        logger.info("No shortcuts defined in config.")
+        return
 
-            # Read all JSON files as text (one row per file)
-            df_text = spark.read.text(f"{shortcut_folder}/**/*.json")
+    all_data_frames = []
+
+    # Import once at the top level for efficiency
+    from pyspark.sql.functions import (
+        input_file_name, split, transform, lower as spark_lower,
+        array_contains, lit, from_json, col
+    )
+    from pyspark.sql.types import MapType, StringType
+
+    for entry in shortcuts:
+        shortcut_name = entry.get("name")
+        if not shortcut_name:
+            logger.warning("Skipping entry without 'name'")
+            continue
+
+        shortcut_folder = f"Files/{shortcut_name}"
+        json_pattern = f"{shortcut_folder}/**/*.json"   # Recursive
+
+        logger.info(f"Processing shortcut '{shortcut_name}' → recursive scan: {json_pattern}")
+
+        try:
+            # Read each JSON file as a single string (one row per file)
+            df_text = spark.read.text(json_pattern)
 
             if df_text.rdd.isEmpty():
                 logger.info(f"No JSON files found under '{shortcut_name}'")
@@ -23,24 +41,30 @@ Replace everything from df_raw = spark.read... down to the df_final creation wit
             df_text = df_text.withColumn("file_path", input_file_name())
             df_text = df_text.withColumn("shortcut_name", lit(shortcut_name))
 
-            # Filter out files in watermark folders
+            # === Watermark folder skipping (case-insensitive) ===
             df_text = df_text.withColumn("path_parts", split(col("file_path"), "/"))
-            df_text = df_text.withColumn("lower_parts", transform(col("path_parts"), lambda x: lower(x)))
-            df_text = df_text.withColumn("has_watermark", array_contains(col("lower_parts"), "watermark"))
-            df_text = df_text.filter(~col("has_watermark"))
+            df_text = df_text.withColumn(
+                "lower_parts",
+                transform(col("path_parts"), lambda x: spark_lower(x))
+            )
+            df_text = df_text.withColumn(
+                "has_watermark_folder",
+                array_contains(col("lower_parts"), SKIP_SUBFOLDER_NAME.lower())
+            )
 
-            if df_text.rdd.isEmpty():
-                logger.info(f"All JSON files in '{shortcut_name}' are in watermark folder → skipped")
+            df_filtered = df_text.filter(~col("has_watermark_folder"))
+
+            if df_filtered.rdd.isEmpty():
+                logger.info(f"All JSON files in '{shortcut_name}' are inside a 'watermark' folder → skipped")
                 continue
 
-            # Now parse the JSON string safely using from_json with MapType
-            from pyspark.sql.types import MapType, StringType
-            from pyspark.sql.functions import from_json
+            # Drop helper columns early
+            df_clean = df_filtered.drop("file_path", "path_parts", "lower_parts", "has_watermark_folder")
 
-            json_options = {"multiLine": True}
-            df_parsed = df_text.withColumn(
+            # Parse the full JSON content as a flexible map (handles any extra fields)
+            df_parsed = df_clean.withColumn(
                 "json_map",
-                from_json(col("value"), MapType(StringType(), StringType()), json_options)
+                from_json(col("value"), MapType(StringType(), StringType()), {"multiLine": "true"})
             )
 
             # Extract top-level fields
@@ -51,25 +75,17 @@ Replace everything from df_raw = spark.read... down to the df_final creation wit
                 col("json_map.databaseName").alias("database_name")
             )
 
-            # Extract nested fields using getItem on deeper maps
-            df_extracted = df_extracted.withColumn(
-                "source_props",
-                col("json_map.sourceSystemProperties")
-            ).withColumn(
-                "curated_props",
-                col("json_map.curatedProperties")
-            )
+            # Extract nested structures as maps first
+            df_extracted = df_extracted \
+                .withColumn("source_props", col("json_map.sourceSystemProperties")) \
+                .withColumn("curated_props", col("json_map.curatedProperties"))
 
-            # Now safely extract nested values (returns null if missing)
-            df_extracted = df_extracted.withColumn(
-                "source_system_ingest_type",
-                col("source_props.ingestType")
-            ).withColumn(
-                "target_load_type",
-                col("curated_props.targetLoadType")
-            )
+            # Extract deeply nested fields safely
+            df_extracted = df_extracted \
+                .withColumn("source_system_ingest_type", col("source_props.ingestType")) \
+                .withColumn("target_load_type", col("curated_props.targetLoadType"))
 
-            # Final select
+            # Final column selection
             df_final = df_extracted.select(
                 "shortcut_name",
                 "dataset_name",
@@ -80,3 +96,32 @@ Replace everything from df_raw = spark.read... down to the df_final creation wit
             )
 
             all_data_frames.append(df_final)
+
+        except Exception as e:
+            logger.error(f"Error processing shortcut '{shortcut_name}': {e}")
+            continue
+
+    if not all_data_frames:
+        logger.info("No valid data extracted from any shortcut.")
+        return
+
+    # Union all DataFrames
+    df_combined = all_data_frames[0]
+    for df in all_data_frames[1:]:
+        df_combined = df_combined.unionByName(df, allowMissingColumns=True)
+
+    record_count = df_combined.count()
+    logger.info(f"Extracted {record_count} dataset records. Upserting into {TARGET_FQ}...")
+
+    # Idempotent MERGE on natural key
+    DeltaTable.forName(spark, TARGET_FQ).alias("target").merge(
+        df_combined.alias("source"),
+        "target.shortcut_name = source.shortcut_name AND target.dataset_name = source.dataset_name"
+    ).whenMatchedUpdateAll() \
+     .whenNotMatchedInsertAll() \
+     .execute()
+
+    logger.info(f"Successfully merged {record_count} records into {TARGET_FQ}")
+
+    # Display final result
+    display(spark.sql(f"SELECT * FROM {TARGET_FQ} ORDER BY shortcut_name, dataset_name"))
