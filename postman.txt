@@ -1,67 +1,76 @@
-2026-01-08 21:02:27,252 [INFO] Processing shortcut 'prdandprc_policy_dp_datasets' → recursive scan: Files/prdandprc_policy_dp_datasets/**/*.json
-2026-01-08 21:02:29,355 [ERROR] Error processing shortcut 'prdandprc_policy_dp_datasets': [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "lower(path_parts)" due to data type mismatch: Parameter 1 requires the "STRING" type, however "path_parts" has the type "ARRAY<STRING>
+Fixed Version (Replace the JSON reading and extraction part)
+Why This Works Better
 
-    for entry in shortcuts:
-        shortcut_name = entry.get("name")
-        if not shortcut_name:
-            logger.warning("Skipping entry without 'name'")
-            continue
+Reads the entire JSON file as a string → no schema mismatch
+Uses from_json with MapType(String, String) → treats everything as key-value, very forgiving
+Allows extra fields in nested objects without failing
+Still supports multiline JSON
+Keeps watermark folder skipping intact
 
-        shortcut_folder = f"Files/{shortcut_name}"
-        json_pattern = f"{shortcut_folder}/**/*.json"   # Recursive
+Replace Only This Part
+Replace everything from df_raw = spark.read... down to the df_final creation with the code block above.
+# --- RELIABLE METHOD: Read as wholeTextFiles (string) ---
+            from pyspark.sql.functions import input_file_name
 
-        logger.info(f"Processing shortcut '{shortcut_name}' → recursive scan: {json_pattern}")
+            # Read all JSON files as text (one row per file)
+            df_text = spark.read.text(f"{shortcut_folder}/**/*.json")
 
-        try:
-            df_raw = (
-                spark.read
-                .schema(build_json_schema())
-                .option("multiline", "true")
-                .json(json_pattern)
-            )
-
-            if df_raw.rdd.isEmpty():
+            if df_text.rdd.isEmpty():
                 logger.info(f"No JSON files found under '{shortcut_name}'")
                 continue
 
-            # === FIXED SECTION START ===
-            from pyspark.sql.functions import (
-                input_file_name, split, transform, lower as spark_lower, array_contains
-            )
+            # Add file path and shortcut name
+            df_text = df_text.withColumn("file_path", input_file_name())
+            df_text = df_text.withColumn("shortcut_name", lit(shortcut_name))
 
-            df_with_path = df_raw.withColumn("file_path", input_file_name())
+            # Filter out files in watermark folders
+            df_text = df_text.withColumn("path_parts", split(col("file_path"), "/"))
+            df_text = df_text.withColumn("lower_parts", transform(col("path_parts"), lambda x: lower(x)))
+            df_text = df_text.withColumn("has_watermark", array_contains(col("lower_parts"), "watermark"))
+            df_text = df_text.filter(~col("has_watermark"))
 
-            df_with_path = df_with_path.withColumn(
-                "path_parts",
-                split(col("file_path"), "/")
-            )
-
-            df_with_path = df_with_path.withColumn(
-                "lower_parts",
-                transform(col("path_parts"), lambda x: spark_lower(x))
-            )
-
-            df_with_path = df_with_path.withColumn(
-                "has_watermark_folder",
-                array_contains(col("lower_parts"), SKIP_SUBFOLDER_NAME.lower())
-            )
-
-            df_filtered = df_with_path.filter(~col("has_watermark_folder"))
-
-            if df_filtered.rdd.isEmpty():
-                logger.info(f"All JSON files in '{shortcut_name}' are inside a 'watermark' folder → skipped")
+            if df_text.rdd.isEmpty():
+                logger.info(f"All JSON files in '{shortcut_name}' are in watermark folder → skipped")
                 continue
 
-            df_clean = df_filtered.drop("file_path", "path_parts", "lower_parts", "has_watermark_folder")
-            # === FIXED SECTION END ===
+            # Now parse the JSON string safely using from_json with MapType
+            from pyspark.sql.types import MapType, StringType
+            from pyspark.sql.functions import from_json
 
-            df_clean = df_clean.withColumn("shortcut_name", lit(shortcut_name))
+            json_options = {"multiLine": True}
+            df_parsed = df_text.withColumn(
+                "json_map",
+                from_json(col("value"), MapType(StringType(), StringType()), json_options)
+            )
 
-            for target_col, keys in FIELD_MAPPING.items():
-                nested = ".".join(keys)
-                df_clean = df_clean.withColumn(target_col, col(nested))
+            # Extract top-level fields
+            df_extracted = df_parsed.select(
+                "shortcut_name",
+                col("json_map.datasetName").alias("dataset_name"),
+                col("json_map.datasetTypeName").alias("dataset_type_name"),
+                col("json_map.databaseName").alias("database_name")
+            )
 
-            df_final = df_clean.select(
+            # Extract nested fields using getItem on deeper maps
+            df_extracted = df_extracted.withColumn(
+                "source_props",
+                col("json_map.sourceSystemProperties")
+            ).withColumn(
+                "curated_props",
+                col("json_map.curatedProperties")
+            )
+
+            # Now safely extract nested values (returns null if missing)
+            df_extracted = df_extracted.withColumn(
+                "source_system_ingest_type",
+                col("source_props.ingestType")
+            ).withColumn(
+                "target_load_type",
+                col("curated_props.targetLoadType")
+            )
+
+            # Final select
+            df_final = df_extracted.select(
                 "shortcut_name",
                 "dataset_name",
                 "dataset_type_name",
@@ -71,7 +80,3 @@
             )
 
             all_data_frames.append(df_final)
-
-        except Exception as e:
-            logger.error(f"Error processing shortcut '{shortcut_name}': {e}")
-            continue
