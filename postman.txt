@@ -11,10 +11,9 @@ def run_load_datasets_metadata():
 
     all_data_frames = []
 
-    # Import required functions
     from pyspark.sql.functions import (
         input_file_name, split, transform, lower as spark_lower,
-        array_contains, lit, from_json, col
+        array_contains, lit, from_json, col, monotonically_increasing_id
     )
     from pyspark.sql.types import MapType, StringType
 
@@ -30,91 +29,91 @@ def run_load_datasets_metadata():
         logger.info(f"Processing shortcut '{shortcut_name}' → {json_pattern}")
 
         try:
-            # Read each JSON file as whole text
-            df_text = spark.read.text(json_pattern)
-
-            if df_text.rdd.isEmpty():
+            # === MOST RELIABLE: wholeTextFiles → one row per complete file ===
+            rdd_files = spark.sparkContext.wholeTextFiles(json_pattern)
+            if rdd_files.isEmpty():
                 logger.info(f"No JSON files found under '{shortcut_name}'")
                 continue
 
-            df_text = df_text.withColumn("file_path", input_file_name())
-            df_text = df_text.withColumn("shortcut_name", lit(shortcut_name))
+            df_files = spark.createDataFrame(rdd_files, ["file_path", "value"])
 
-            # === Skip files inside any "watermark" folder (case-insensitive) ===
-            df_text = df_text.withColumn("path_parts", split(col("file_path"), "/"))
-            df_text = df_text.withColumn(
-                "lower_parts",
-                transform(col("path_parts"), lambda x: spark_lower(x))
+            df_files = df_files.withColumn("shortcut_name", lit(shortcut_name))
+
+            # Watermark skipping: check if path contains /watermark/
+            df_files = df_files.withColumn("path_parts", split(col("file_path"), "/"))
+            df_files = df_files.withColumn(
+                "lower_parts", transform(col("path_parts"), lambda x: spark_lower(x))
             )
-            df_text = df_text.withColumn(
-                "has_watermark_folder",
-                array_contains(col("lower_parts"), SKIP_SUBFOLDER_NAME.lower())
+            df_files = df_files.withColumn(
+                "has_watermark_folder", array_contains(col("lower_parts"), "watermark")
             )
 
-            df_filtered = df_text.filter(~col("has_watermark_folder"))
+            df_filtered = df_files.filter(~col("has_watermark_folder"))
 
             if df_filtered.rdd.isEmpty():
-                logger.info(f"All JSON files in '{shortcut_name}' are in 'watermark' folder → skipped")
+                logger.info(f"All files in '{shortcut_name}' are in watermark folder → skipped")
                 continue
 
-            df_clean = df_filtered.drop("file_path", "path_parts", "lower_parts", "has_watermark_folder")
+            df_clean = df_filtered.drop("path_parts", "lower_parts", "has_watermark_folder")
 
-            # Parse full JSON as map (top level)
+            # Parse top-level JSON (very permissive map)
             df_parsed = df_clean.withColumn(
                 "json_map",
                 from_json(col("value"), MapType(StringType(), StringType()), {"multiLine": "true"})
             )
 
-            # Extract top-level scalar fields
+            # Extract top-level fields + nested objects as strings
             df_extracted = df_parsed.select(
                 "shortcut_name",
                 col("json_map.datasetName").alias("dataset_name"),
                 col("json_map.datasetTypeName").alias("dataset_type_name"),
                 col("json_map.databaseName").alias("database_name"),
-                # Get nested objects as JSON strings
                 col("json_map.sourceSystemProperties").alias("source_props_json"),
                 col("json_map.curatedProperties").alias("curated_props_json")
             )
 
-            # Parse nested JSON strings back into maps
-            nested_map_schema = MapType(StringType(), StringType())
+            # Parse nested objects (they come as JSON strings)
+            nested_map_type = MapType(StringType(), StringType())
+            df_extracted = df_extracted.withColumn(
+                "source_props", from_json(col("source_props_json"), nested_map_type)
+            ).withColumn(
+                "curated_props", from_json(col("curated_props_json"), nested_map_type)
+            )
 
-            df_extracted = df_extracted \
-                .withColumn("source_props", from_json(col("source_props_json"), nested_map_schema)) \
-                .withColumn("curated_props", from_json(col("curated_props_json"), nested_map_schema))
+            # Final extraction
+            df_final = df_extracted.select(
+                "shortcut_name",
+                "dataset_name",
+                "dataset_type_name",
+                "database_name",
+                col("source_props.ingestType").alias("source_system_ingest_type"),
+                col("curated_props.targetLoadType").alias("target_load_type")
+            )
 
-            # Now extract the actual fields we need
-            df_final = df_extracted \
-                .withColumn("source_system_ingest_type", col("source_props.ingestType")) \
-                .withColumn("target_load_type", col("curated_props.targetLoadType")) \
-                .select(
-                    "shortcut_name",
-                    "dataset_name",
-                    "dataset_type_name",
-                    "database_name",
-                    "source_system_ingest_type",
-                    "target_load_type"
-                )
+            # Add a unique ID per file to help debug duplicates if needed
+            df_final = df_final.withColumn("_file_id", monotonically_increasing_id())
 
             all_data_frames.append(df_final)
 
         except Exception as e:
-            logger.error(f"Error processing shortcut '{shortcut_name}': {e}")
+            logger.error(f"Error processing shortcut '{shortcut_name}': {str(e)}")
             continue
 
     if not all_data_frames:
-        logger.info("No valid data extracted from any shortcut.")
+        logger.info("No valid data extracted.")
         return
 
-    # Union all
     df_combined = all_data_frames[0]
     for df in all_data_frames[1:]:
         df_combined = df_combined.unionByName(df, allowMissingColumns=True)
 
-    record_count = df_combined.count()
-    logger.info(f"Extracted {record_count} records. Upserting into {TARGET_FQ}...")
+    # Final deduplication safety net (shouldn't be needed but prevents surprises)
+    df_combined = df_combined.dropDuplicates(["shortcut_name", "dataset_name"])
 
-    # Idempotent merge
+    record_count = df_combined.count()
+    logger.info(f"Extracted & deduplicated {record_count} records.")
+
+    # Upsert
     DeltaTable.forName(spark, TARGET_FQ).alias("target").merge(
         df_combined.alias("source"),
         "target.shortcut_name = source.shortcut_name AND target.dataset_name = source.dataset_name"
@@ -122,7 +121,6 @@ def run_load_datasets_metadata():
      .whenNotMatchedInsertAll() \
      .execute()
 
-    logger.info(f"Successfully merged {record_count} records into {TARGET_FQ}")
+    logger.info(f"Successfully loaded {record_count} records into {TARGET_FQ}")
 
-    # Show result
-    display(spark.sql(f"SELECT * FROM {TARGET_FQ} ORDER BY shortcut_name, dataset_name"))
+    display(spark.sql(f"SELECT * FROM {TARGET_FQ} ORDER BY shortcut_name, dataset_name LIMIT 50"))
