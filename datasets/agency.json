@@ -163,3 +163,51 @@
         "targetLoadType": "merge"
     }
 }
+{
+    "datasetName": "mgnotrans_optimized",
+    "enable": true,
+    "datasetTypeName": "database",
+    "databaseName": "GIGINSDATA",
+    "datasetSchema": "dbo",
+    "skipProductLoad": true,
+    "sourceSystemProperties": {
+        "sourceSystemName": "IIS",
+        "includeSpecificColumns": [
+            "*",
+            "YEAR(enteredon) as enteredon_year",
+            "MONTH(enteredon) as enteredon_month"
+        ],
+        "ingestType": "watermark",
+        "sourceWatermarkIdentifier": "enteredon",
+        "isDynamicQuery": true
+    },
+    "rawProperties": {
+        "lakehouseName": "den_lhw_dpr_001_raw_files",
+        "fileType": "parquet",
+        "directoryName": "IIS_GIGINSDATA"
+    },
+    "curatedProperties": {
+        "lakehouseName": "den_lhw_scu_001_policy_curated",
+        "schemaName": "policy",
+        "fileOptions": {
+            "encoding": "ISO-8859-1",
+            "header": true,
+            "inferColumnTypes": true,
+            "multiline": true,
+            "delimiter": ",",
+            "escape": "\"",
+            "timestampFormat": "dd/MM/yyyy"
+        },
+        "columnList": ["*"],
+        "primaryKeyList": [
+            "ID"
+        ], 
+        "partitionKeyList": [
+            "enteredon_year",
+            "enteredon_month"
+        ],
+        "duplicateCheckEnabled": false,
+        "targetFileFormat": "delta",
+        "targetLoadType": "merge"
+    }
+}
