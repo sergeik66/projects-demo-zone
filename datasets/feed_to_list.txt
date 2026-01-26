@@ -1,0 +1,36 @@
+import json
+
+# Read the input JSON file
+with open('iis_curated_feed.json', 'r') as f:
+    data = json.load(f)
+
+# Extract fileNames only from sections where datasetType is "database"
+file_names = []
+
+# datasetsConfig is usually a list with one item in your example
+datasets_config = data.get('datasetsConfig', [])
+
+for config_section in datasets_config:
+    if config_section.get('datasetType') == 'database':
+        datasets = config_section.get('datasets', [])
+        for dataset in datasets:
+            file_name = dataset.get('fileName')
+            if file_name:
+                file_names.append(file_name.lower())  # keeping lowercase as in previous version
+
+# If we found any matching fileNames
+if file_names:
+    # Create the comma-separated string wrapped in single quotes
+    list_str = "'" + "','".join(file_names) + "'"
+    
+    # Create the output structure
+    output = {"dataset_list": list_str}
+    
+    # Write to the output JSON file
+    with open('dataset_curated_list.json', 'w', encoding='utf-8') as f:
+        json.dump(output, f, indent=2)
+    
+    print(f"Generated dataset_curated_list.json with {len(file_names)} datasets")
+    print("dataset_list:", list_str)
+else:
+    print("No datasets with datasetType 'database' found.")
