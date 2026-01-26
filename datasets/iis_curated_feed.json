@@ -1,0 +1,111 @@
+{
+    "feedName": "policy_dp",
+    "feedDescription": "This is a feed for Policy DP",
+    "workLoadType": "dp-spark",
+    "skipProductLoad": false,
+    "dataDeduplicationAlert": false,
+    "deduplicationAlertTemplate": "deduplication_msg",
+    "datasetsConfig": [
+        {
+            "datasetType": "database",
+            "datasets": [
+                {
+                    "fileName": "AGENCY",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "INSURED",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "WCLOCNAM",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "BusinessType",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "SUBINDUSTRY",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "Industry",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "NAICS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "PC_PRODUCTS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "FIPS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "MGNOTRANS_TYPES",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "MGNOTRANS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "WCINFO",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "MGTRANS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "LOOKUPS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "EMPLOYEE",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "BPCLASS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "BILLINGS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "AUTOUW_RESULTS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "UWBuildings",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "WCCLASS",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "wcpayrol",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "MGEXTRA",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "POLACT",
+                    "sourceConfigFolderName": "policy_dp"
+                },
+                {
+                    "fileName": "programrules",
+                    "sourceConfigFolderName": "policy_dp"
+                }
+            ]
+        }
+    ]
+}
