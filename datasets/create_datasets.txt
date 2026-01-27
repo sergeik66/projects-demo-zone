@@ -1,0 +1,174 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, coalesce, year, month
+import json
+import os
+from typing import Dict, List
+
+def generate_dataset_configs(
+    pii_delta_path: str,
+    curated_column_delta_path: str,
+    curated_dataset_delta_path: str,
+    output_dir: str,
+    database_name: str = "giginsdata",
+    dataset_schema: str = "dbo",
+    raw_lakehouse: str = "den_lhw_dpr_001_raw_files",
+    curated_lakehouse: str = "den_lhw_scu_001_iis_curated",
+    raw_directory: str = "IIS_GIGINSDATA"
+) -> None:
+    """
+    Dynamically generates and saves dataset JSON configuration files based on Delta Lake tables.
+
+    Args:
+        pii_delta_path (str): Path to the dataset_pii_list Delta table.
+        curated_column_delta_path (str): Path to the curated_dataset_column_list Delta table.
+        curated_dataset_delta_path (str): Path to the curated_dataset_list Delta table.
+        output_dir (str): Directory to save the generated JSON files.
+        database_name (str, optional): Database name for the config. Defaults to "giginsdata".
+        dataset_schema (str, optional): Dataset schema for the config. Defaults to "dbo".
+        raw_lakehouse (str, optional): Raw lakehouse name. Defaults to "den_lhw_dpr_001_raw_files".
+        curated_lakehouse (str, optional): Curated lakehouse name. Defaults to "den_lhw_scu_001_iis_curated".
+        raw_directory (str, optional): Raw directory name. Defaults to "IIS_GIGINSDATA".
+
+    Returns:
+        None: Saves JSON files to the output directory.
+    """
+    spark = SparkSession.builder.getOrCreate()
+
+    # Load Delta tables
+    pii_df = spark.read.format("delta").load(pii_delta_path)
+    curated_column_df = spark.read.format("delta").load(curated_column_delta_path)
+    curated_dataset_df = spark.read.format("delta").load(curated_dataset_delta_path)
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Get unique datasets
+    datasets = curated_column_df.select("dataset_name").distinct().rdd.map(lambda row: row[0]).collect()
+
+    for dataset_name in datasets:
+        # Filter curated columns for this dataset (assuming 'include_in_load' column exists; if not, remove the filter)
+        ds_curated = curated_column_df.filter(col("dataset_name") == dataset_name)
+        # If 'include_in_load' exists, uncomment the following:
+        # ds_curated = ds_curated.filter(col("include_in_load") == True)
+
+        if ds_curated.count() == 0:
+            print(f"Skipping {dataset_name}: No columns to load.")
+            continue
+
+        columns = ds_curated.select("column_name").rdd.map(lambda row: row[0]).collect()
+        data_types_rows = ds_curated.select("column_name", "column_data_type").collect()
+        data_types = {row["column_name"]: row["column_data_type"] for row in data_types_rows}
+
+        # Exclude PII columns where include_in_load == 0
+        ds_pii = pii_df.filter(
+            (col("dataset_name") == dataset_name) &
+            (col("include_in_load") == 0)
+        )
+        exclude_cols = ds_pii.select("column_name").rdd.map(lambda row: row[0]).collect()
+        columns = [col for col in columns if col not in exclude_cols]
+
+        # Check for watermark columns (case-insensitive)
+        lower_columns = [col.lower() for col in columns]
+        has_updateon = 'updateon' in lower_columns
+        has_enteredon = 'enteredon' in lower_columns
+
+        ingest_type = "full"
+        watermark_id = None
+        partition_keys = []
+        additional_selects = []
+
+        if has_updateon or has_enteredon:
+            ingest_type = "watermark"
+            if has_updateon and has_enteredon:
+                watermark_id = "COALESCE(UPDATEON, ENTEREDON)"
+                additional_selects += [
+                    "YEAR(UPDATEON) AS updateon_year",
+                    "MONTH(UPDATEON) AS updateon_month"
+                ]
+                partition_keys += ["updateon_year", "updateon_month"]
+            elif has_updateon:
+                watermark_id = "UPDATEON"
+                additional_selects += [
+                    "YEAR(UPDATEON) AS updateon_year",
+                    "MONTH(UPDATEON) AS updateon_month"
+                ]
+                partition_keys += ["updateon_year", "updateon_month"]
+            elif has_enteredon:
+                watermark_id = "ENTEREDON"
+                additional_selects += [
+                    "YEAR(ENTEREDON) AS enteredon_year",
+                    "MONTH(ENTEREDON) AS enteredon_month"
+                ]
+                partition_keys += ["enteredon_year", "enteredon_month"]
+
+        # Build includeSpecificColumns list
+        select_list = []
+        for col in columns:
+            col_lower = col.lower()
+            col_upper = col.upper()
+            dt = data_types.get(col, '').lower()
+            if dt == 'geography':
+                select_list.append(f"CAST({col_lower} AS VARCHAR(255)) AS {col_lower}")
+            else:
+                select_list.append(col_upper)
+
+        select_list += additional_selects
+
+        # Get primaryKeyList from curated_dataset_list (assuming it's a comma-separated string)
+        pk_row = curated_dataset_df.filter(col("dataset_name") == dataset_name).select("primary_key_list").first()
+        if pk_row and pk_row[0]:
+            primary_key_list = [p.strip() for p in pk_row[0].split(",")]
+        else:
+            primary_key_list = []
+
+        # Determine targetLoadType
+        target_load_type = "merge" if primary_key_list else "overwrite"
+
+        # Build the config dictionary
+        config = {
+            "datasetName": dataset_name,
+            "enable": True,
+            "datasetTypeName": "database",
+            "databaseName": database_name,
+            "datasetSchema": dataset_schema,
+            "skipProductLoad": False,
+            "sourceSystemProperties": {
+                "sourceSystemName": "IIS",
+                "includeSpecificColumns": select_list,
+                "ingestType": ingest_type,
+                "sourceWatermarkIdentifier": watermark_id,
+                "isDynamicQuery": True if ingest_type == "watermark" else False
+            },
+            "rawProperties": {
+                "lakehouseName": raw_lakehouse,
+                "fileType": "parquet",
+                "directoryName": raw_directory
+            },
+            "curatedProperties": {
+                "lakehouseName": curated_lakehouse,
+                "schemaName": database_name,
+                "primaryKeyList": primary_key_list,
+                "duplicateCheckEnabled": False,
+                "targetFileFormat": "delta",
+                "targetLoadType": target_load_type
+            }
+        }
+
+        # Add partitionKeyList if applicable
+        if partition_keys:
+            config["curatedProperties"]["partitionKeyList"] = partition_keys
+
+        # Save to JSON file
+        json_path = os.path.join(output_dir, f"{dataset_name}_dataset_config.json")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+
+        print(f"Generated config for {dataset_name}: {json_path}")
+
+# Example usage (in a Spark environment like Databricks or Fabric):
+# generate_dataset_configs(
+#     pii_delta_path="path/to/dataset_pii_list_delta",
+#     curated_column_delta_path="path/to/curated_dataset_column_list_delta",
+#     curated_dataset_delta_path="path/to/curated_dataset_list_delta",
+#     output_dir="output_configs"
+# )
