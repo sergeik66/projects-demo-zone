@@ -1,0 +1,847 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# ## den_nbk_pdi_cicd_init_tables
+# 
+# null
+
+# In[11]:
+
+
+import logging
+from typing import Dict, List
+from collections import defaultdict
+from datetime import datetime
+import fsspec
+import json
+import sempy.fabric as fabric
+from pyspark.sql.functions import col, coalesce, year, month
+
+
+# In[10]:
+
+
+# Configuration constants, variables and logging
+SCHEMA_NAME  = "catalog"
+
+# Detect environment (PRD vs non-PRD)
+ws_name = spark.conf.get("trident.workspace.name", "").upper()
+is_prd = "-PRD" in ws_name
+
+feed_file_name = "iis_curated_feed"
+feed_variant = "_prd" if is_prd else ""
+
+dataset_curated_file_name = "dataset_curated_list"
+
+# Set filesystem options
+storage_options = {
+    "account_name": "onelake",
+    "account_host": "onelake.dfs.fabric.microsoft.com",
+}
+
+# Get workspace and lakehouse IDs
+workspace_id = fabric.get_workspace_id()
+lakehouse_id = fabric.get_lakehouse_id()
+
+feed_path = (
+    f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/"
+    f"{lakehouse_id}/Files/feeds/"
+    f"{feed_file_name}{feed_variant}.json"
+)
+
+curated_dataset_list_path = (
+    f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/"
+    f"{lakehouse_id}/Files/feeds/"
+    f"{dataset_curated_file_name}.json"
+)
+
+datasets_path = (
+    f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/"
+    f"{lakehouse_id}/Files/datasets/iis_curated/"
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+# In[9]:
+
+
+def create_schema(schema_name: str):
+    """ Create and set the schema as the current context."""
+    try:
+        logger.info(f"Ensuring schema {schema_name} exists")
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+        logger.info(f"Schema {schema_name} ready")
+        spark.sql(f"USE {schema_name}")
+        logger.info(f"Schema {schema_name} set as current context")
+    except Exception as e:
+        logger.error(f"Error creating or setting schema {schema_name}: {str(e)}")
+        raise
+
+
+# In[8]:
+
+
+def create_and_upsert_datasource_list(schema_name: str):
+    """Create and seed datasource_list table using MERGE."""
+    try:
+        logger.info(f"Creating and seeding {schema_name}.datasource_list table")
+
+        # --------------------------------------------------------------------
+        # 1. Create table if it does not exist
+        # --------------------------------------------------------------------
+        datasource_list_ddl = f"""
+        CREATE TABLE IF NOT EXISTS {schema_name}.datasource_list (
+            datasource_key INT,
+            datasource_name STRING,
+            datasource_type STRING,
+            extraction_method STRING,
+            datasource_connection_name STRING,
+            contact_email STRING,
+            datasource_notes STRING,
+            dl_is_current_flag BOOLEAN,
+            dl_row_expiration_date DATE,
+            dl_row_effective_date DATE,
+            dl_row_update_timestamp TIMESTAMP,
+            dl_row_insert_timestamp TIMESTAMP
+        ) USING DELTA COMMENT "List of data sources for SACDP.";
+        """
+        spark.sql(datasource_list_ddl)
+
+        logger.info(f"Table {schema_name}.datasource_list created successfully")
+
+        # --------------------------------------------------------------------
+        # 2. Seed DataFrame (can include multiple rows later)
+        # --------------------------------------------------------------------
+        seed_df = spark.createDataFrame(
+            [
+                (
+                    "IIS",
+                    "SQL Server",
+                    "SQL Query",
+                    "ONP-DEV-SQLSERVER-SACDP-CPL-YAZSQLDAILY",
+                    "tony.thornton@guard.com",
+                    "A placeholder for any notes related to the data source."
+                )
+            ],
+            [
+                "datasource_name",
+                "datasource_type",
+                "extraction_method",
+                "datasource_connection_name",
+                "contact_email",
+                "datasource_notes"
+            ]
+        )
+
+        seed_df.createOrReplaceTempView("seed_datasource_list")
+
+        # --------------------------------------------------------------------
+        # 3. MERGE into the target
+        # --------------------------------------------------------------------
+        merge_sql = f"""
+        MERGE INTO {schema_name}.datasource_list AS tgt
+        USING (
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY datasource_name) AS datasource_key,
+                datasource_name,
+                datasource_type,
+                extraction_method,
+                datasource_connection_name,
+                contact_email,
+                datasource_notes,
+                True AS dl_is_current_flag,
+                current_date() AS dl_row_effective_date,
+                DATE '9999-01-01' AS dl_row_expiration_date,
+                current_timestamp() AS dl_row_update_timestamp,
+                current_timestamp() AS dl_row_insert_timestamp
+            FROM seed_datasource_list
+        ) AS src
+        ON tgt.datasource_name = src.datasource_name
+
+        WHEN MATCHED THEN UPDATE SET
+            tgt.datasource_type = src.datasource_type,
+            tgt.extraction_method = src.extraction_method,
+            tgt.datasource_connection_name = src.datasource_connection_name,
+            tgt.contact_email = src.contact_email,
+            tgt.datasource_notes = src.datasource_notes,
+            tgt.dl_is_current_flag = True,
+            tgt.dl_row_expiration_date = src.dl_row_expiration_date,
+            tgt.dl_row_update_timestamp = src.dl_row_update_timestamp
+
+        WHEN NOT MATCHED THEN INSERT (
+            datasource_key,
+            datasource_name,
+            datasource_type,
+            extraction_method,
+            datasource_connection_name,
+            contact_email,
+            datasource_notes,
+            dl_is_current_flag,
+            dl_row_expiration_date,
+            dl_row_effective_date,
+            dl_row_update_timestamp,
+            dl_row_insert_timestamp
+        )
+        VALUES (
+            src.datasource_key,
+            src.datasource_name,
+            src.datasource_type,
+            src.extraction_method,
+            src.datasource_connection_name,
+            src.contact_email,
+            src.datasource_notes,
+            src.dl_is_current_flag,
+            src.dl_row_expiration_date,
+            src.dl_row_effective_date,
+            src.dl_row_update_timestamp,
+            src.dl_row_insert_timestamp
+        );
+        """
+
+        spark.sql(merge_sql)
+        logger.info(f"Table {schema_name}.datasource_list seeded via MERGE successfully")
+
+    except Exception as e:
+        logger.error(
+            f"Error creating, seeding, or updating {schema_name}.datasource_list: {str(e)}"
+        )
+        raise
+
+
+# In[7]:
+
+
+def create_dataset_list(schema_name: str):
+    """Create dataset_list table."""
+    try:
+        logger.info(f"Ensuring {schema_name}.curated_dataset_list table exists")
+        # Define table DDL
+        sql_ddl = f"""
+        CREATE TABLE IF NOT EXISTS {schema_name}.curated_dataset_list (
+            datasource_key INT,
+            database_name STRING,
+            dataset_schema STRING,
+            dataset_name STRING,
+            primary_key_list STRING,
+            estimated_row_count INT,
+            dl_row_insert_timestamp TIMESTAMP
+        ) USING DELTA COMMENT "List of all potential datasets for SACDP ingestion.";
+        """
+        spark.sql(sql_ddl)
+        logger.info(f"Table {schema_name}.curated_dataset_list created successfully")
+    except Exception as e:
+        logger.error(f"Error creating or updating {schema_name}.curated_dataset_list: {str(e)}")
+        raise
+
+
+# In[12]:
+
+
+def create_dataset_pii_list(schema_name: str):
+    """Create dataset_pii_list table."""
+    try:
+        logger.info(f"Ensuring {schema_name}.dataset_pii_list table exists")
+        # Define table DDL
+        sql_ddl = f"""
+        CREATE TABLE IF NOT EXISTS {schema_name}.dataset_pii_list (
+            database_name STRING,
+            dataset_schema STRING,
+            dataset_name STRING,
+            column_name STRING,
+            include_in_load BOOLEAN,
+            dl_row_insert_timestamp TIMESTAMP
+        ) USING DELTA COMMENT "List of all potential dataset list for SACDP.";
+        """
+        spark.sql(sql_ddl)
+        logger.info(f"Table {schema_name}.dataset_pii_list created successfully")
+    except Exception as e:
+        logger.error(f"Error creating or updating {schema_name}.dataset_pii_list: {str(e)}")
+        raise
+
+
+# In[13]:
+
+
+def create_dataset_column_list(schema_name: str):
+    """Create dataset_columns_list table."""
+    try:
+        logger.info(f"Ensuring {schema_name}.curated_dataset_column_list table exists")
+        # Define table DDL
+        sql_ddl = f"""
+        CREATE TABLE IF NOT EXISTS {schema_name}.curated_dataset_column_list (
+            datasource_key INT,
+            database_name STRING,
+            dataset_schema STRING,
+            dataset_name STRING,
+            column_name STRING,
+            is_nullable_flag BOOLEAN,
+            column_data_type STRING,
+            dl_row_insert_timestamp TIMESTAMP
+        ) USING DELTA COMMENT "List of all potential dataset columns for SACDP ingestion.";
+        """
+        spark.sql(sql_ddl)
+        logger.info(f"Table {schema_name}.curated_dataset_column_list created successfully")
+    except Exception as e:
+        logger.error(f"Error creating or updating {schema_name}.curated_dataset_column_list: {str(e)}")
+        raise
+
+
+# In[14]:
+
+
+def create_feed_json(
+    feed_path: str,
+    storage_options: Dict,
+    schema_name: str = "catalog"
+) -> None:
+    """
+    Runs SQL against the curated_datasets_subdomains table and builds
+    the sample.json configuration file dynamically.
+    
+    Args:
+        feed_path (str): Where to save the generated JSON file.
+    
+    Returns:
+        dict: The JSON structure created.
+    TO DO:
+        Need to make it to work for cdc ingest type
+    """
+    fs = fsspec.filesystem("abfss", **storage_options)
+
+    logger.info("Starting feed JSON file generation...")
+
+    try:
+        query = """
+        SELECT
+            dataset_name AS fileName,
+            CONCAT('iis_',database_name) AS sourceConfigFolderName,
+            database_name AS databaseName
+        FROM 
+            {schema_name}.curated_datasets_subdomains
+        WHERE 
+            dataset_type_name = 'database' 
+            AND dataset_schema = 'dbo'
+        GROUP BY
+            database_name,
+            dataset_schema,
+            dataset_name
+        """
+
+        logger.info("Running SQL query...")
+        datasets_subdomains_df = spark.sql(query)
+
+        if datasets_subdomains_df.count() == 0:
+            logger.warning("SQL query returned no datasets. JSON file will be empty.")
+        
+        datasets = datasets_subdomains_df.select("databaseName", "fileName", "sourceConfigFolderName") \
+            .toPandas().to_dict(orient="records")
+
+        logger.info(f"Found {len(datasets)} datasets.")
+
+        # Build JSON structure
+        json_data = {
+            "feedName": feed_file_name,
+            "feedDescription": "This is a feed for iis feed",
+            "workLoadType": "dp-spark",
+            "skipProductLoad": False,
+            "dataDeduplicationAlert": False,
+            "deduplicationAlertTemplate": "deduplication_msg",
+            "datasetsConfig": [
+                {
+                    "datasetType": "database",
+                    "datasets": datasets
+                }
+            ]
+        }
+
+        logger.info(f"Writing JSON to {feed_path}...")
+        with fs.open(feed_path, "w", encoding='utf-8') as f:
+            json.dump(json_data, f, indent=4)
+
+        logger.info("Feed JSON file generation completed successfully.")
+    except Exception as e:
+        logger.error("Error occurred during JSON generation.", exc_info=True)
+        raise  # Re-throw for upstream handling
+
+
+# In[15]:
+
+
+def create_dataset_list_from_feed(
+    feed_path: str,
+    curated_dataset_list_path: str,
+    storage_options: Dict
+) -> None:
+    """
+    Generate datasets for SQL query IN() in Lookup activiy pipeline.
+    
+    Args:
+        feed_path (str): Path to the feed file
+        curated_dataset_list_path (str): Path to save generated file
+        storage_options (Dict): Filesystem storage options
+    """
+    # Read the input JSON file
+    logger.info(f"Loading config from {feed_path}")
+    fs = fsspec.filesystem("abfss", **storage_options)
+    with fs.open(feed_path, "r") as f:
+        data = json.load(f)    
+
+    # Group fileNames by databaseName only from sections where datasetType is "database"
+    groups = defaultdict(list)
+
+    # datasetsConfig is usually a list with one item in your example
+    datasets_config = data.get('datasetsConfig', [])
+
+    for config_section in datasets_config:
+        if config_section.get('datasetType') == 'database':
+            datasets = config_section.get('datasets', [])
+            for dataset in datasets:
+                file_name = dataset.get('fileName')
+                database_name = dataset.get('databaseName')
+                if file_name and database_name:
+                    groups[database_name.lower()].append(file_name.lower())
+
+    # If we found any groups
+    if groups:
+        databases = []
+        for db_name, file_names in sorted(groups.items()):  # Optional: sort by db_name
+            # Create the comma-separated string wrapped in single quotes
+            list_str = "'" + "','".join(sorted(file_names)) + "'"  # Optional: sort file_names
+            
+            # Append to list
+            databases.append({
+                "databaseName": db_name,
+                "dataset_list": list_str
+            })
+        
+        # Create the output structure
+        output = {"databases": databases}
+        
+        # Write to the output JSON file
+        with fs.open(curated_dataset_list_path, 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=4)
+        
+        logger.info(f"Generated {dataset_curated_file_name} with {len(file_names)} datasets")
+    else:
+        logger.info("No datasets with datasetType 'database' found.")
+
+
+# In[45]:
+
+
+def create_dataset_files(
+    pii_table: str = "dataset_pii_list",
+    curated_column_table: str = "curated_dataset_column_list",
+    curated_dataset_table: str = "curated_dataset_list",
+    schema_name: str = "catalog",
+    output_dir: str = "",
+    raw_lakehouse: str = "den_lhw_dpr_001_raw_files",
+    curated_lakehouse: str = "den_lhw_scu_001_iis_curated"
+) -> None:
+    """
+    Dynamically generates and saves dataset JSON configuration files based on metadata tables.
+    Assumptions:
+        Data pipeline loaded SQL Server database(s) metadata
+
+    Args:
+        pii_table (str): Table name contaning PII information, Defaults to "dataset_pii_list" table.
+        curated_column_table (str): Table name contaning table column level information. Defaults to "dataset_column_list" table.
+        curated_dataset_table (str): Table name contaning table dataset and primiry key information. Defaults to "curated_dataset_list" table.
+        output_dir (str): Directory to save the generated dataset JSON files.
+        raw_lakehouse (str, optional): Raw lakehouse name. Defaults to "den_lhw_dpr_001_raw_files".
+        curated_lakehouse (str, optional): Curated lakehouse name. Defaults to "den_lhw_scu_001_iis_curated".
+
+    Returns:
+        None: Saves JSON files to the output directory.
+    """
+    fs = fsspec.filesystem("abfss", **storage_options)
+
+    # Load metadata tables
+    query =f"""
+        SELECT dataset_name, column_name, include_in_load FROM {schema_name}.{pii_table}
+        WHERE dataset_name = 'wclocnam'
+    """
+    logger.info(f"Getting metadata from {schema_name}.{pii_table} table...")
+    pii_df = spark.sql(query)
+
+    query = f"""
+        SELECT dataset_name, column_name, column_data_type FROM {schema_name}.{curated_column_table}
+        WHERE dataset_name = 'wclocnam'
+    """
+    logger.info(f"Getting metadata from {schema_name}.{curated_column_table} table...")
+    curated_column_df = spark.sql(query)
+
+    query = f"""
+        SELECT database_name, dataset_schema, dataset_name, primary_key_list FROM {schema_name}.{curated_dataset_table}
+        WHERE dataset_name = 'wclocnam'
+    """
+    logger.info(f"Getting metadata from {schema_name}.{curated_dataset_table} table...")
+    curated_dataset_df = spark.sql(query)
+
+    # Get unique datasets
+    datasets = curated_column_df.select("dataset_name").distinct().rdd.map(lambda row: row[0]).collect()
+    # display(datasets)
+
+    for dataset_name in datasets:
+        # Filter curated columns for this dataset
+        ds_curated = curated_column_df.filter(f"dataset_name = '{dataset_name}'")
+        # ds_curated = ds_curated.filter(col("include_in_load") == True)
+
+        if ds_curated.count() == 0:
+            print(f"Skipping {dataset_name}: No columns to load.")
+            continue
+
+        columns = ds_curated.select("column_name").rdd.map(lambda row: row[0]).collect()
+        data_types_rows = ds_curated.select("column_name", "column_data_type").collect()
+        data_types = {row["column_name"]: row["column_data_type"] for row in data_types_rows}
+
+        # Exclude PII columns where include_in_load == 0
+        ds_pii = pii_df.filter(
+            f"dataset_name = '{dataset_name}' AND include_in_load = 0"
+            )
+        exclude_cols = ds_pii.select("column_name").rdd.map(lambda row: row[0]).collect()
+        columns = [col for col in columns if col not in exclude_cols]
+
+        # Check for watermark columns (case-insensitive)
+        lower_columns = [col.lower() for col in columns]
+        has_updateon = 'updateon' in lower_columns
+        has_enteredon = 'enteredon' in lower_columns
+
+        ingest_type = "full"
+        watermark_id = None
+        partition_keys = []
+        additional_selects = []
+
+        if has_updateon or has_enteredon:
+            ingest_type = "watermark"
+            if has_updateon and has_enteredon:
+                watermark_id = "COALESCE(updateon, enteredon)"
+                additional_selects += [
+                    "YEAR(updateon) AS updateon_year",
+                    "MONTH(updateon) AS updateon_month"
+                ]
+                partition_keys += ["updateon_year", "updateon_month"]
+            elif has_updateon:
+                watermark_id = "updateon"
+                additional_selects += [
+                    "YEAR(updateon) AS updateon_year",
+                    "MONTH(updateon) AS updateon_month"
+                ]
+                partition_keys += ["updateon_year", "updateon_month"]
+            elif has_enteredon:
+                watermark_id = "enteredon"
+                additional_selects += [
+                    "YEAR(enteredon) AS enteredon_year",
+                    "MONTH(enteredon) AS enteredon_month"
+                ]
+                partition_keys += ["enteredon_year", "enteredon_month"]
+
+        # Build includeSpecificColumns list
+        select_list = []
+        for col_name in columns:
+            col_lower = col_name.lower()
+            dt = data_types.get(col_name, '').lower()
+            if dt == 'geography':
+                select_list.append(f"CAST({col_lower} AS VARCHAR(255)) AS {col_lower}")
+            elif dt == 'char':
+                select_list.append(f"UPPER(TRIM({col_lower})) AS {col_lower}")
+            else:
+                select_list.append(col_lower)
+
+        select_list += additional_selects
+
+        # Get primaryKeyList from curated_dataset_list (assuming it's a comma-separated string)
+        pk_row = curated_dataset_df.filter(f"dataset_name = '{dataset_name}'").select("primary_key_list", "database_name", "dataset_schema").first()
+        if pk_row and pk_row[0]:
+            primary_key_list = [p.strip() for p in pk_row[0].split(",")]
+        else:
+            primary_key_list = []
+        # Get database name and schema name from curated_dataset_list
+        database_name = pk_row[1]
+        dataset_schema = pk_row[2]
+
+        # Determine targetLoadType
+        target_load_type = "merge" if primary_key_list else "overwrite"
+
+        # Build the dataset config dictionary
+        config = {
+            "datasetName": dataset_name,
+            "enable": True,
+            "datasetTypeName": "database",
+            "databaseName": database_name,
+            "datasetSchema": dataset_schema,
+            "skipProductLoad": False,
+            "sourceSystemProperties": {
+                "sourceSystemName": "IIS",
+                "includeSpecificColumns": select_list,
+                "ingestType": ingest_type,
+                "sourceWatermarkIdentifier": watermark_id,
+                "isDynamicQuery": True if ingest_type == "watermark" else False
+            },
+            "rawProperties": {
+                "lakehouseName": raw_lakehouse,
+                "fileType": "parquet",
+                "directoryName": f"iis_{database_name}".upper()
+            },
+            "curatedProperties": {
+                "lakehouseName": curated_lakehouse,
+                "schemaName": database_name,
+                "primaryKeyList": primary_key_list,
+                "duplicateCheckEnabled": False,
+                "targetFileFormat": "delta",
+                "targetLoadType": target_load_type
+            }
+        }
+
+        # Add partitionKeyList if applicable
+        if partition_keys:
+            config["curatedProperties"]["partitionKeyList"] = partition_keys
+
+        # Save dataset to JSON file
+        dataset_json_path = f"{output_dir}iis_{database_name}/{dataset_name}.json"
+        with fs.open(dataset_json_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4)
+
+        print(f"Generated config for {dataset_name}: {dataset_json_path}")
+
+
+# In[5]:
+
+
+# TO DO: Delete this cell
+def create_dataset_configs(
+    pii_table: str = "dataset_pii_list",
+    curated_column_table: str = "curated_dataset_column_list",
+    curated_dataset_table: str = "curated_dataset_list",
+    schema_name: str = "catalog",
+    output_dir: str = "",
+    database_name: str = "giginsdata",
+    dataset_schema: str = "dbo",
+    raw_lakehouse: str = "den_lhw_dpr_001_raw_files",
+    curated_lakehouse: str = "den_lhw_scu_001_iis_curated",
+    raw_directory: str = "IIS_GIGINSDATA"
+) -> None:
+    """
+    Dynamically generates and saves dataset JSON configuration files based on metadata tables.
+
+    Args:
+        pii_table (str): Table name contaning PII information, Defaults to "dataset_pii_list" table.
+        curated_column_table (str): Table name contaning table column level information. Defaults to "dataset_column_list" table.
+        curated_dataset_table (str): Table name contaning table dataset and primiry key information. Defaults to "curated_dataset_list" table.
+        output_dir (str): Directory to save the generated dataset JSON files.
+        database_name (str, optional): Database name for the config. Defaults to "giginsdata".
+        dataset_schema (str, optional): Dataset schema for the config. Defaults to "dbo".
+        raw_lakehouse (str, optional): Raw lakehouse name. Defaults to "den_lhw_dpr_001_raw_files".
+        curated_lakehouse (str, optional): Curated lakehouse name. Defaults to "den_lhw_scu_001_iis_curated".
+        raw_directory (str, optional): Raw directory name. Defaults to "IIS_GIGINSDATA".
+
+    Returns:
+        None: Saves JSON files to the output directory.
+    """
+    fs = fsspec.filesystem("abfss", **storage_options)
+
+    # Load metadata tables
+    query =f"""
+        SELECT dataset_name, column_name, include_in_load FROM {schema_name}.{pii_table}
+    """
+    logger.info(f"Getting metadata from {schema_name}.{pii_table} table...")
+    pii_df = spark.sql(query)
+
+    query = f"""
+        SELECT dataset_name, column_name, column_data_type FROM {schema_name}.{curated_column_table}
+    """
+    logger.info(f"Getting metadata from {schema_name}.{curated_column_table} table...")
+    curated_column_df = spark.sql(query)
+
+    query = f"""
+        SELECT database_name, dataset_name, primary_key_list FROM {schema_name}.{curated_dataset_table}
+    """
+    logger.info(f"Getting metadata from {schema_name}.{curated_dataset_table} table...")
+    curated_dataset_df = spark.sql(query)
+
+    # Get unique datasets
+    datasets = curated_column_df.select("dataset_name").distinct().rdd.map(lambda row: row[0]).collect()
+    # display(datasets)
+
+    for dataset_name in datasets:
+        # Filter curated columns for this dataset
+        ds_curated = curated_column_df.filter(f"dataset_name = '{dataset_name}'")
+        #ds_curated = curated_column_df.filter(col("dataset_name") == dataset_name)
+        # ds_curated = ds_curated.filter(col("include_in_load") == True)
+
+        if ds_curated.count() == 0:
+            print(f"Skipping {dataset_name}: No columns to load.")
+            continue
+
+        columns = ds_curated.select("column_name").rdd.map(lambda row: row[0]).collect()
+        data_types_rows = ds_curated.select("column_name", "column_data_type").collect()
+        data_types = {row["column_name"]: row["column_data_type"] for row in data_types_rows}
+
+        # Exclude PII columns where include_in_load == 0
+        ds_pii = pii_df.filter(
+            f"dataset_name = '{dataset_name}' AND include_in_load = 0"
+            )
+        exclude_cols = ds_pii.select("column_name").rdd.map(lambda row: row[0]).collect()
+        columns = [col for col in columns if col not in exclude_cols]
+
+        # Check for watermark columns (case-insensitive)
+        lower_columns = [col.lower() for col in columns]
+        has_updateon = 'updateon' in lower_columns
+        has_enteredon = 'enteredon' in lower_columns
+
+        ingest_type = "full"
+        watermark_id = None
+        partition_keys = []
+        additional_selects = []
+
+        if has_updateon or has_enteredon:
+            ingest_type = "watermark"
+            if has_updateon and has_enteredon:
+                watermark_id = "COALESCE(updateon, enteredon)"
+                additional_selects += [
+                    "YEAR(updateon) AS updateon_year",
+                    "MONTH(updateon) AS updateon_month"
+                ]
+                partition_keys += ["updateon_year", "updateon_month"]
+            elif has_updateon:
+                watermark_id = "updateon"
+                additional_selects += [
+                    "YEAR(updateon) AS updateon_year",
+                    "MONTH(updateon) AS updateon_month"
+                ]
+                partition_keys += ["updateon_year", "updateon_month"]
+            elif has_enteredon:
+                watermark_id = "enteredon"
+                additional_selects += [
+                    "YEAR(enteredon) AS enteredon_year",
+                    "MONTH(enteredon) AS enteredon_month"
+                ]
+                partition_keys += ["enteredon_year", "enteredon_month"]
+
+        # Build includeSpecificColumns list
+        select_list = []
+        for col_name in columns:
+            col_lower = col_name.lower()
+            dt = data_types.get(col_name, '').lower()
+            if dt == 'geography':
+                select_list.append(f"CAST({col_lower} AS VARCHAR(255)) AS {col_lower}")
+            else:
+                select_list.append(col_lower)
+
+        select_list += additional_selects
+
+        # Get primaryKeyList from curated_dataset_list (assuming it's a comma-separated string)
+        pk_row = curated_dataset_df.filter(f"dataset_name = '{dataset_name}'").select("primary_key_list").first()
+        if pk_row and pk_row[0]:
+            primary_key_list = [p.strip() for p in pk_row[0].split(",")]
+        else:
+            primary_key_list = []
+
+        # Determine targetLoadType
+        target_load_type = "merge" if primary_key_list else "overwrite"
+
+        # Build the dataset config dictionary
+        config = {
+            "datasetName": dataset_name,
+            "enable": True,
+            "datasetTypeName": "database",
+            "databaseName": database_name,
+            "datasetSchema": dataset_schema,
+            "skipProductLoad": False,
+            "sourceSystemProperties": {
+                "sourceSystemName": "IIS",
+                "includeSpecificColumns": select_list,
+                "ingestType": ingest_type,
+                "sourceWatermarkIdentifier": watermark_id,
+                "isDynamicQuery": True if ingest_type == "watermark" else False
+            },
+            "rawProperties": {
+                "lakehouseName": raw_lakehouse,
+                "fileType": "parquet",
+                "directoryName": raw_directory
+            },
+            "curatedProperties": {
+                "lakehouseName": curated_lakehouse,
+                "schemaName": database_name,
+                "primaryKeyList": primary_key_list,
+                "duplicateCheckEnabled": False,
+                "targetFileFormat": "delta",
+                "targetLoadType": target_load_type
+            }
+        }
+
+        # Add partitionKeyList if applicable
+        if partition_keys:
+            config["curatedProperties"]["partitionKeyList"] = partition_keys
+
+        # Save dataset to JSON file
+        dataset_json_path = f"{output_dir}{dataset_name}.json"
+        with fs.open(dataset_json_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4)
+
+        print(f"Generated config for {dataset_name}: {dataset_json_path}")
+
+
+# In[16]:
+
+
+def main(run_me: bool = True):
+    """Main function to orchestrate notebook execution."""
+    start_time = datetime.now()
+    logger.info(f"Starting notebook execution at {start_time}")
+    
+    if not run_me:
+        logger.info("run_me is False, skipping notebook execution")
+        return  
+    try:
+        # Create schema
+        create_schema(SCHEMA_NAME)
+
+        # Create and seed datasource_list
+        create_and_upsert_datasource_list(SCHEMA_NAME)
+
+        # Create dataset_list
+        create_dataset_list(SCHEMA_NAME)
+
+        # Create dataset_column_list
+        create_dataset_column_list(SCHEMA_NAME)
+
+        # Create dataset_list
+        create_dataset_pii_list(SCHEMA_NAME)
+
+        # Create feed file
+        create_feed_json(feed_path, storage_options)
+
+        # Create dataset_list file
+        create_dataset_list_from_feed(feed_path, curated_dataset_list_path, storage_options)
+
+        # Create dataset files
+        create_dataset_files(output_dir=datasets_path)
+        
+        end_time = datetime.now()
+        logger.info(f"Notebook execution completed successfully at {end_time}. Duration: {end_time - start_time}")
+    except Exception as e:
+        logger.error(f"Notebook execution failed: {str(e)}")
+        raise
+
+
+# In[ ]:
+
+
+if __name__ == "__main__":
+    # Set run_me parameter (default True)
+    run_me = True  # Change to False to skip execution
+    
+    # Validate run_me parameter
+    if not isinstance(run_me, bool):
+        logger.error("run_me parameter must be a boolean")
+        raise ValueError("run_me parameter must be a boolean")
+    
+    # Run main function
+    main(run_me)
+
