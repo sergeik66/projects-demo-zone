@@ -1,0 +1,46 @@
+import json
+from collections import defaultdict
+
+# Read the input JSON file
+with open('iis_curated_feed.json', 'r') as f:
+    data = json.load(f)
+
+# Group fileNames by databaseName only from sections where datasetType is "database"
+groups = defaultdict(list)
+
+# datasetsConfig is usually a list with one item in your example
+datasets_config = data.get('datasetsConfig', [])
+
+for config_section in datasets_config:
+    if config_section.get('datasetType') == 'database':
+        datasets = config_section.get('datasets', [])
+        for dataset in datasets:
+            file_name = dataset.get('fileName')
+            database_name = dataset.get('databaseName')
+            if file_name and database_name:
+                groups[database_name.lower()].append(file_name.lower())
+
+# If we found any groups
+if groups:
+    databases = []
+    for db_name, file_names in sorted(groups.items()):  # Optional: sort by db_name
+        # Create the comma-separated string wrapped in single quotes
+        list_str = "'" + "','".join(sorted(file_names)) + "'"  # Optional: sort file_names
+        
+        # Append to list
+        databases.append({
+            "databaseName": db_name,
+            "dataset_list": list_str
+        })
+    
+    # Create the output structure
+    output = {"databases": databases}
+    
+    # Write to the output JSON file
+    with open('dataset_curated_list.json', 'w', encoding='utf-8') as f:
+        json.dump(output, f, indent=2)
+    
+    print(f"Generated dataset_curated_list.json with {len(databases)} databases")
+    print(output)
+else:
+    print("No datasets with datasetType 'database' found.")
