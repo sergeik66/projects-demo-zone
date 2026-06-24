@@ -16,3 +16,9 @@ For very large numbers of roles, prefer the batch list_roles() + _put_full_roles
 Monitor Fabric capacity and API throttling.
 
 This class is ready to be dropped into a Fabric notebook, Azure DevOps pipeline step, or local automation script. Let me know if you need enhancements (e.g., YAML/JSON config loader, diff reporting, or integration with your existing secrets/Key Vault patterns).
+
+ pii_full_members = [
+        {"objectId": "06743794-d68d-49e0-9f3f-70fe952b28af", "objectType": "Group", "tenantId": tenant_id}
+    ]
+
+    [{'objectId': '06743794-d68d-49e0-9f3f-70fe952b28af', 'objectType': 'Group', 'tenantId': '[REDACTED]'}]
