@@ -1,3 +1,28 @@
+class Expectations:
+
+    DQ_LAKEHOUSE = "den_lhw_pdi_001_observability"
+    DQ_SCHEMA = "data_quality"
+    DQ_RULE_MASTER = "dim_dq_rule_master"
+    DQ_ERROR_EVENT = "fact_dq_error_event"
+    DQ_ERROR_EVENT_DETAIL = "fact_dq_error_event_detail"
+
+    def __init__(
+        self,
+        lakehouse_name: str,
+        schema_name: str,
+        table_name: str,
+        batch_data: DataFrame,
+        expectations: Optional[dict] = None,
+    ):
+        self.expectations = expectations
+        self.lakehouse_name = lakehouse_name
+        self.schema_name = schema_name
+        self.table_name = table_name
+        self.batch_data = batch_data
+        self.lakehouse = LakehouseManager(lakehouse_name)
+        self.table_path = self.lakehouse.build_delta_file_path(table_name, schema_name)
+        self.dq_lakehouse = LakehouseManager(self.DQ_LAKEHOUSE)
+
 Traceback (most recent call last):
   File "/tmp/ipykernel_7049/88353622.py", line 57, in <module>
     .start_ingest(elt_id, run_id)
