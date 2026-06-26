@@ -1,3 +1,20 @@
+Traceback (most recent call last):
+  File "/tmp/ipykernel_7049/88353622.py", line 57, in <module>
+    .start_ingest(elt_id, run_id)
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/ingestion/ingest.py", line 364, in start_ingest
+    Expectations(
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/data_quality/data_quality.py", line 71, in __init__
+    self.lakehouse = LakehouseManager(lakehouse_name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/common/lakehouse.py", line 16, in __init__
+    self.lakehouse_id = lakehouse_name
+    ^^^^^^^^^^^^^^^^^
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/common/lakehouse.py", line 61, in lakehouse_id
+    raise RuntimeError(
+RuntimeError: Failed to resolve lakehouse 'den_lhw_scu_001_iis(workspace_id=None): An error occurred while calling z:notebookutils.lakehouse.get.
+: com.microsoft.spark.notebook.msutils.ArtifactNotFoundException: Artifact 'den_lhw_scu_001_iis' not found
+
 2026-06-26 17:04:21 | INFO     | 🚀 Starting ingestion pipeline - Run ID: 8e38e836-3079-4961-898c-02a47d70cfcb | ELT ID: 60ee9ba3-8f82-418f-ac72-b0cea3c978f4
 2026-06-26 17:04:21 | INFO     | Loaded config for dataset: asc_groups
 2026-06-26 17:04:26 | INFO     | Using LakehouseManager for lakehouse: den_lhw_pdi_001_observability
