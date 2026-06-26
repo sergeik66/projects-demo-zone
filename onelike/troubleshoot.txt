@@ -1,0 +1,61 @@
+2026-06-26 17:04:21 | INFO     | 🚀 Starting ingestion pipeline - Run ID: 8e38e836-3079-4961-898c-02a47d70cfcb | ELT ID: 60ee9ba3-8f82-418f-ac72-b0cea3c978f4
+2026-06-26 17:04:21 | INFO     | Loaded config for dataset: asc_groups
+2026-06-26 17:04:26 | INFO     | Using LakehouseManager for lakehouse: den_lhw_pdi_001_observability
+2026-06-26 17:04:27 | DEBUG    | Source lakehouse set: cfc31f00-71b9-4281-a87c-d7bc461231d5
+2026-06-26 17:04:35 | INFO     | start_ingest called | elt_id=60ee9ba3-8f82-418f-ac72-b0cea3c978f4 | run_id=8e38e836-3079-4961-898c-02a47d70cfcb
+2026-06-26 17:04:40 | DEBUG    | Clustering columns moved to front: ['dl_lastmodifiedutc']
+2026-06-26 17:04:44 | ERROR    | Ingestion failed: An error occurred while calling z:notebookutils.lakehouse.get.
+: com.microsoft.spark.notebook.msutils.ArtifactNotFoundException: Artifact 'den_lhw_scu_001_iis' not found
+
+
+try:
+            logger.info("🔄 Starting SparkEngine ingestion...")
+
+            data = (
+                SparkEngine.ingest(dataset_config_json)
+                .source_lakehouse(
+                    lakehouse_name=target_lakehouse_id,
+                    workspace_id=target_workspace_id
+                    )
+                .source_data(data_location)
+                .target_lakehouse(
+                    lakehouse_name=target_lakehouse_id,
+                    workspace_id=target_workspace_id
+                )
+                .start_ingest(elt_id, run_id)
+                .perform_pre_check(dataset_config_folder_name, dataset_file_name)
+                .metrics()
+            )
+
+            logger.info("✅ Ingestion completed successfully")
+
+            if remove_source_files:
+                logger.info(f"Source files will be removed for dataset: {metadata_config_dict.get('datasetName')}")
+                try:
+                    notebookutils.fs.rm(data_location, True)
+                    logger.info("✅ Files removed successfully")
+                except Exception as remove_err:
+                    logger.info(f"⚠️ Failed to remove files for {data_location}: {update_err} (non-fatal)")
+            else:
+                logger.info(f"Source files will be retained for dataset: {metadata_config_dict.get('datasetName')}")
+
+        except Exception as ingest_error:
+            logger.error(f"❌ Ingestion failed: {ingest_error}", exc_info=True)
+            data = {
+                "ingestion": {
+                    "error_message": str(ingest_error),
+                    "startTime": str(processing_start_time)
+                }
+            }
+            raise  # re-raise so outer except block can handle final logging
+
+        finally:
+            # Always send log, even on failure
+            message_metadata = {"runOutput": data}
+            send_message_to_logs(message_metadata, metadata_config_dict, log_file_name)
+
+    except Exception as e:
+        logger.error(f"💥 Notebook execution failed: {e}", exc_info=True)
+        raise
+
+    logger.info(f"🎉 Pipeline finished successfully in {get_current_timestamp() - processing_start_time}")
