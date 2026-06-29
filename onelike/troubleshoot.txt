@@ -1,11 +1,30 @@
-2026-06-26 17:04:21 | INFO     | 🚀 Starting ingestion pipeline - Run ID: 8e38e836-3079-4961-898c-02a47d70cfcb | ELT ID: 60ee9ba3-8f82-418f-ac72-b0cea3c978f4
-2026-06-26 17:04:21 | INFO     | Loaded config for dataset: asc_groups
-2026-06-26 17:04:26 | INFO     | Using LakehouseManager for lakehouse: den_lhw_pdi_001_observability
-2026-06-26 17:04:27 | DEBUG    | Source lakehouse set: cfc31f00-71b9-4281-a87c-d7bc461231d5
-2026-06-26 17:04:35 | INFO     | start_ingest called | elt_id=60ee9ba3-8f82-418f-ac72-b0cea3c978f4 | run_id=8e38e836-3079-4961-898c-02a47d70cfcb
-2026-06-26 17:04:40 | DEBUG    | Clustering columns moved to front: ['dl_lastmodifiedutc']
-2026-06-26 17:04:44 | ERROR    | Ingestion failed: An error occurred while calling z:notebookutils.lakehouse.get.
-: com.microsoft.spark.notebook.msutils.ArtifactNotFoundException: Artifact 'den_lhw_scu_001_iis' not found
+2026-06-26 19:41:06 | INFO     | 🚀 Starting ingestion pipeline - Run ID: 8e38e836-3079-4961-898c-02a47d70cfcb | ELT ID: 60ee9ba3-8f82-418f-ac72-b0cea3c978f4
+2026-06-26 19:41:06 | INFO     | Loaded config for dataset: asc_groups
+2026-06-26 19:41:08 | INFO     | Using LakehouseManager for lakehouse: den_lhw_pdi_001_observability
+2026-06-26 19:41:09 | DEBUG    | Source lakehouse set: cfc31f00-71b9-4281-a87c-d7bc461231d5 (workspace_id=874d1011-7b24-489c-b399-27602391de2f)
+2026-06-26 19:41:16 | INFO     | start_ingest called | elt_id=60ee9ba3-8f82-418f-ac72-b0cea3c978f4 | run_id=8e38e836-3079-4961-898c-02a47d70cfcb
+2026-06-26 19:41:19 | DEBUG    | Clustering columns moved to front: ['dl_lastmodifiedutc']
+2026-06-26 19:41:21 | ERROR    | Ingestion failed: Failed to resolve lakehouse 'den_lhw_scu_001_iis(workspace_id=874d1011-7b24-489c-b399-27602391de2f): get() got an unexpected keyword argument 'workspace_id'
+Traceback (most recent call last):
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/common/lakehouse.py", line 57, in lakehouse_id
+    lakehouse = notebookutils.lakehouse.get(value, workspace_id=self._workspace_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: get() got an unexpected keyword argument 'workspace_id'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/ingestion/ingest.py", line 364, in start_ingest
+    Expectations(
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/data_quality/data_quality.py", line 74, in __init__
+    self.lakehouse = LakehouseManager(lakehouse_name, workspace_id)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/common/lakehouse.py", line 16, in __init__
+    self.lakehouse_id = lakehouse_name
+    ^^^^^^^^^^^^^^^^^
+  File "/home/trusted-service-user/cluster-env/trident_env/lib/python3.11/site-packages/spark_engine/common/lakehouse.py", line 61, in lakehouse_id
+    raise RuntimeError(
+RuntimeError: Failed to resolve lakehouse 'den_lhw_scu_001_iis(workspace_id=874d1011-7b24-489c-b399-27602391de2f): get() got an unexpected keyword argument 'workspace_id
 
 
 try:
