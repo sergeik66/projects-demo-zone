@@ -1,7 +1,12 @@
 self.data_quality_enabled = config["curatedProperties"].get("dataQualityEnabled", True)
 
-expectation_success = True
+        # === DQ Observability Metrics ===
+        self.ALLMETRICS.dq_enabled = self.data_quality_enabled
+        self.ALLMETRICS.dq_executed = False
+        self.ALLMETRICS.dq_status = "skipped" if not self.data_quality_enabled else "pending"
         self.ALLMETRICS.expectations = None
+
+        expectation_success = True
 
         if self.data_quality_enabled:
             dq = (
@@ -10,7 +15,7 @@ expectation_success = True
                     self.target_schema,
                     self.target_table,
                     self._source_data,
-                    workspace_id=self._target_workspace_id,   # from previous cross-workspace fix
+                    workspace_id=self._target_workspace_id,
                 )
                 .set_expectations(
                     self.target_table,
@@ -29,10 +34,18 @@ expectation_success = True
                     self.ALLMETRICS.quarantine.append(dq.quarantine_metrics)
                 self.ALLMETRICS.expectations = dq.expectation_metrics
                 expectation_success = dq.expectation_metrics.get("success", True)
+
+                # Update observability status
+                self.ALLMETRICS.dq_executed = True
+                self.ALLMETRICS.dq_status = "passed" if expectation_success else "failed"
             else:
                 self.logger.info("No expectations defined for this dataset")
+                self.ALLMETRICS.dq_status = "no_expectations_defined"
+                self.ALLMETRICS.dq_executed = False
         else:
             self.logger.info("Data quality expectations skipped (dataQualityEnabled=false in config)")
+            self.ALLMETRICS.dq_status = "skipped"
+            self.ALLMETRICS.dq_executed = False
 
         if expectation_success:
             self.logger.info(f"Load type: - {self.load_type} and target_exists - {target_exists}")
