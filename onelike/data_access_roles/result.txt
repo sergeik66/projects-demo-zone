@@ -1,0 +1,87 @@
+{
+  "value": [
+    {
+      "name": "PIIFullAccess",
+      "id": "e296cae8-d6e7-4c4d-a59a-8d7f072d97de",
+      "etag": "\"cc8787ec070d4a1395ce310306104091\"",
+      "kind": "Policy",
+      "decisionRules": [
+        {
+          "effect": "Permit",
+          "permission": [
+            {
+              "attributeName": "Path",
+              "attributeValueIncludedIn": [
+                "*"
+              ]
+            },
+            {
+              "attributeName": "Action",
+              "attributeValueIncludedIn": [
+                "Read"
+              ]
+            }
+          ]
+        }
+      ],
+      "members": {
+        "microsoftEntraMembers": [
+          {
+            "tenantId": "[REDACTED]",
+            "objectId": "90cc682a-cb94-4048-83d1-139e05f8a292"
+          }
+        ],
+        "fabricItemMembers": []
+      }
+    },
+    {
+      "name": "NoPiiColumns",
+      "kind": "Policy",
+      "decisionRules": [
+        {
+          "effect": "Permit",
+          "permission": [
+            {
+              "attributeName": "Path",
+              "attributeValueIncludedIn": [
+                "*"
+              ]
+            },
+            {
+              "attributeName": "Action",
+              "attributeValueIncludedIn": [
+                "Read"
+              ]
+            }
+          ],
+          "constraints": {
+            "columns": [
+              {
+                "tablePath": "/Tables/asc_groups",
+                "columnNames": [
+                  "enteredby",
+                  "enteredon",
+                  "updateby",
+                  "updateon"
+                ],
+                "columnEffect": "Permit",
+                "columnAction": [
+                  "Read"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "members": {
+        "microsoftEntraMembers": [
+          {
+            "objectId": "06743794-d68d-49e0-9f3f-70fe952b28af",
+            "objectType": "Group",
+            "tenantId": "[REDACTED]"
+          }
+        ]
+      }
+    }
+  ]
+}
