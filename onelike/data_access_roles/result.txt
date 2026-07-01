@@ -1,3 +1,23 @@
+{
+    "product_name": "SACDP",
+    "feed_name": "iis_curated_feed_test",
+    "dataset_name": "asc_groups",
+    "source_system": "IIS",
+    "metadata": {
+        "runOutput": "{\"ingestion\": {\"success\": true, \"eltId\": \"60ee9ba3-8f82-418f-ac72-b0cea3c978f4\", \"runId\": \"8e38e836-3079-4961-898c-02a47d70cfcb\", \"startTime\": \"2026-07-01T13:43:48.692344+00:00\", \"endTime\": \"2026-07-01T13:44:21.211476+00:00\", \"lakehouse\": \"den_lhw_scu_001_iis\", \"deltaSchema\": \"giginsdata\", \"deltaObject\": \"asc_groups\", \"error\": null, \"sourceDataCount\": 17, \"recordInserts\": 17, \"recordUpdates\": 0, \"recordDeletes\": 0, \"outputBytes\": 16673}, \"quarantine\": [], \"expectations\": null}"
+    },
+    "zone": "Curated",
+    "stage": "Transformation",
+    "orchestration_tool": "spark",
+    "zone_start_date_time": "2026-07-01 13:43:48.137538",
+    "zone_end_date_time": "2026-07-01 13:44:28.138359",
+    "elt_id": "60ee9ba3-8f82-418f-ac72-b0cea3c978f4",
+    "run_id": "8e38e836-3079-4961-898c-02a47d70cfcb",
+    "invocation_id": "8e38e836-3079-4961-898c-02a47d70cfcb",
+    "source_file_path": "abfss://874d1011-7b24-489c-b399-27602391de2f@onelake.dfs.fabric.microsoft.com/cfc31f00-71b9-4281-a87c-d7bc461231d5/Files/IIS_GIGINSDATA/dbo_asc_groups/c4d36efe-8e3b-4eea-a1f4-f57dc67b91a8"
+}
+
+
 from typing import List, Dict, Optional
 from pyspark.sql import functions as F
 import logging
