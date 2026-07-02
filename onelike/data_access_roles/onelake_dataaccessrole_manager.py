@@ -1,17 +1,27 @@
 # Usage in notebook
-manager = OneLakeDataAccessRoleManager(...)
+# 1. Run ingestion
+data = (
+    SparkEngine.ingest(dataset_config_json)
+    .source_data(data_location)
+    ...
+    .metrics("dict")
+)
 
+# 2. Build visible columns (done in notebook)
 pii_safe_columns = build_pii_safe_columns_dict(
     spark=spark,
     pii_metadata_table_fqn="metadata_lakehouse.dataset_pii_list",
-    data=data   # from Ingest.metrics()
+    data=data
 )
 
+# 3. Sync the role (pass the pre-built dict)
 if pii_safe_columns:
-    manager.sync_no_pii_columns_role(
-        members=your_members,
-        pii_tables_and_safe_columns=pii_safe_columns
+    updated = manager.sync_no_pii_columns_role(
+        members=NO_PII_MEMBERS,
+        pii_tables_and_safe_columns=pii_safe_columns,
+        role_name="NoPiiColumns"
     )
+    logger.info(f"NoPiiColumns role updated: {updated}")
 
 
 import json
@@ -270,56 +280,49 @@ class OneLakeDataAccessRoleManager:
 
     # ------------------ Specialized NoPiiColumns Sync ------------------
     def sync_no_pii_columns_role(
-        self,
-        members: List[Dict],
-        pii_tables_and_safe_columns: Optional[Dict[str, List[str]]] = None,
-        spark=None,
-        pii_metadata_table_fqn: Optional[str] = None,
-        incoming_table_names: Optional[List[str]] = None,
-        role_name: str = "NoPiiColumns",
-        default_schema: str = "dbo"
-    ) -> bool:
-        """Convenience method for NoPiiColumns role with smart sync."""
+    self,
+    members: List[Dict],
+    pii_tables_and_safe_columns: Dict[str, List[str]],
+    role_name: str = "NoPiiColumns"
+) -> bool:
+    """
+    Smart sync for the NoPiiColumns role.
+    
+    Recommended usage:
+        - First call build_pii_safe_columns_dict() in your notebook
+        - Then pass the result to this method
+    """
+    if not pii_tables_and_safe_columns:
+        logger.info("No tables require column-level restrictions.")
+        return False
 
-        if pii_tables_and_safe_columns is None:
-            if spark is None or pii_metadata_table_fqn is None:
-                raise OneLakeSecurityError(
-                    "Provide either 'pii_tables_and_safe_columns' or 'spark' + 'pii_metadata_table_fqn'"
-                )
-            pii_tables_and_safe_columns = build_pii_safe_columns_dict(
-                spark=spark,
-                pii_metadata_table_fqn=pii_metadata_table_fqn,
-                incoming_table_names=incoming_table_names,
-                default_schema=default_schema
-            )
+    # Build Column-Level Security rules
+    column_rules = []
+    for table_path, visible_columns in pii_tables_and_safe_columns.items():
+        column_rules.append({
+            "tablePath": table_path,
+            "columnNames": visible_columns,
+            "columnEffect": "Permit",
+            "columnAction": ["Read"]
+        })
 
-        if not pii_tables_and_safe_columns:
-            logger.info("No tables require PII column restrictions.")
-            return False
+    decision_rules = [{
+        "effect": "Permit",
+        "permission": [
+            {"attributeName": "Path", "attributeValueIncludedIn": ["*"]},
+            {"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}
+        ],
+        "constraints": {
+            "columns": column_rules
+        }
+    }]
 
-        column_rules = []
-        for table_path, visible_cols in pii_tables_and_safe_columns.items():
-            column_rules.append({
-                "tablePath": table_path,
-                "columnNames": visible_cols,
-                "columnEffect": "Permit",
-                "columnAction": ["Read"]
-            })
-
-        decision_rules = [{
-            "effect": "Permit",
-            "permission": [
-                {"attributeName": "Path", "attributeValueIncludedIn": ["*"]},
-                {"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}
-            ],
-            "constraints": {"columns": column_rules}
-        }]
-
-        return self.sync_role(
-            role_name=role_name,
-            members=members,
-            decision_rules=decision_rules
-        )
+    # Use the general smart sync method
+    return self.sync_role(
+        role_name=role_name,
+        members=members,
+        decision_rules=decision_rules
+    )
 
     # ------------------ Convenience Methods ------------------
     def create_or_update_role(self, role: Dict) -> Dict:
