@@ -1,0 +1,94 @@
+{
+    "product_name": "SACDP",
+    "feed_name": "iis_curated_feed_test",
+    "dataset_name": "asc_groups",
+    "source_system": "IIS",
+    "metadata": {
+        "runOutput": "{\"ingestion\": {\"success\": true, \"eltId\": \"60ee9ba3-8f82-418f-ac72-b0cea3c978f4\", \"runId\": \"8e38e836-3079-4961-898c-02a47d70cfcb\", \"startTime\": \"2026-07-01T13:43:48.692344+00:00\", \"endTime\": \"2026-07-01T13:44:21.211476+00:00\", \"lakehouse\": \"den_lhw_scu_001_iis\", \"deltaSchema\": \"giginsdata\", \"deltaObject\": \"asc_groups\", \"error\": null, \"sourceDataCount\": 17, \"recordInserts\": 17, \"recordUpdates\": 0, \"recordDeletes\": 0, \"outputBytes\": 16673}, \"quarantine\": [], \"expectations\": null}"
+    },
+    "zone": "Curated",
+    "stage": "Transformation",
+    "orchestration_tool": "spark",
+    "zone_start_date_time": "2026-07-01 13:43:48.137538",
+    "zone_end_date_time": "2026-07-01 13:44:28.138359",
+    "elt_id": "60ee9ba3-8f82-418f-ac72-b0cea3c978f4",
+    "run_id": "8e38e836-3079-4961-898c-02a47d70cfcb",
+    "invocation_id": "8e38e836-3079-4961-898c-02a47d70cfcb",
+    "source_file_path": "abfss://874d1011-7b24-489c-b399-27602391de2f@onelake.dfs.fabric.microsoft.com/cfc31f00-71b9-4281-a87c-d7bc461231d5/Files/IIS_GIGINSDATA/dbo_asc_groups/c4d36efe-8e3b-4eea-a1f4-f57dc67b91a8"
+}
+
+
+from typing import List, Dict, Optional
+from pyspark.sql import functions as F
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def build_pii_safe_columns_dict(
+    spark,
+    pii_metadata_table_fqn: str,
+    incoming_table_names: List[str],
+    default_schema: str = "dbo"
+) -> Dict[str, List[str]]:
+    """
+    Builds visible (non-PII) columns for the NoPiiColumns role.
+
+    Logic:
+        visible_columns = all_columns_in_table - pii_columns (cd_level = 'CD3')
+    """
+
+    if not incoming_table_names:
+        logger.info("No incoming tables provided.")
+        return {}
+
+    logger.info("🔍 Building visible columns (All columns − PII columns)...")
+
+    # 1. Get PII columns (cd_level = 'CD3') from metadata
+    pii_df = spark.read.format("delta").table(pii_metadata_table_fqn)
+
+    pii_columns_df = (
+        pii_df
+        .filter(F.col("cd_level") == "CD3")
+        .select("table_name", "column_name")
+    )
+
+    # Create a dictionary: {table_name: [pii_column_names]}
+    pii_by_table = (
+        pii_columns_df
+        .groupBy("table_name")
+        .agg(F.collect_set("column_name").alias("pii_columns"))
+        .collect()
+    )
+    pii_dict = {row["table_name"]: set(row["pii_columns"]) for row in pii_by_table}
+
+    result: Dict[str, List[str]] = {}
+
+    for table_name in incoming_table_names:
+        try:
+            # 2. Get ALL columns from the actual table
+            all_columns = spark.table(table_name).columns
+
+            # 3. Get PII columns for this table (if any)
+            pii_columns = pii_dict.get(table_name, set())
+
+            # 4. Calculate visible columns
+            visible_columns = sorted(set(all_columns) - pii_columns)
+
+            if not visible_columns:
+                logger.warning(f"Table {table_name} has no visible columns after removing PII.")
+                continue
+
+            # Build OneLake path (adjust schema if needed)
+            table_path = f"/Tables/{default_schema}/{table_name}"
+
+            result[table_path] = visible_columns
+
+            logger.info(f"   {table_name}: {len(visible_columns)} visible columns "
+                        f"(hidden: {len(pii_columns)})")
+
+        except Exception as e:
+            logger.error(f"Failed to process table {table_name}: {e}")
+
+    logger.info(f"✅ Built visible columns for {len(result)} tables")
+    return result

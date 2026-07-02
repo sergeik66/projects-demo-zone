@@ -1,0 +1,46 @@
+flowchart TD
+    subgraph EntraID["Microsoft Entra ID"]
+        SP["Central Admin Service Principal<br/>• Admin on ALL workspaces<br/>• Owner of all artifacts<br/>• CI/CD & Governance"]
+    end
+
+    subgraph Fabric["Microsoft Fabric"]
+        direction TB
+        WS1["Workspace 1<br/>(Bronze / Landing)"]
+        WS2["Workspace 2<br/>(Silver / Curated)"]
+        WS3["Workspace 3<br/>(Gold / Consumption)"]
+
+        WI1["Workspace Identity 1<br/>(Managed SPN)"]
+        WI2["Workspace Identity 2<br/>(Managed SPN)"]
+        WI3["Workspace Identity 3<br/>(Managed SPN)"]
+    end
+
+    subgraph OneLakeLayer["OneLake"]
+        OL["OneLake Storage<br/>Lakehouses • Tables • Folders"]
+        Sec["OneLake Security<br/>(RLS / CLS / Folder-level)"]
+    end
+
+    SP -->|Admin role + Ownership| WS1
+    SP -->|Admin role + Ownership| WS2
+    SP -->|Admin role + Ownership| WS3
+
+    WS1 --> WI1
+    WS2 --> WI2
+    WS3 --> WI3
+
+    WI1 -->|Runtime auth: pipelines, notebooks, shortcuts| OL
+    WI2 -->|Runtime auth: pipelines, notebooks, shortcuts| OL
+    WI3 -->|Runtime auth: pipelines, notebooks, shortcuts| OL
+
+    WI1 -.->|Cross-workspace shortcuts| WS2
+    WI2 -.->|Cross-workspace shortcuts| WS3
+
+    OL --> Sec
+
+    classDef sp fill:#1e40af,color:#fff
+    classDef ws fill:#0e7490,color:#fff
+    classDef wi fill:#166534,color:#fff
+    classDef ol fill:#854d0e,color:#fff
+    class SP sp
+    class WS1,WS2,WS3 ws
+    class WI1,WI2,WI3 wi
+    class OL,Sec ol
